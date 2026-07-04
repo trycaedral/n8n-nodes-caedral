@@ -25,7 +25,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/caedral/n8n-nodes-caedral"
+    "url": "https://github.com/trycaedral/n8n-nodes-caedral"
   },
   "main": "index.js",
   "scripts": {
@@ -41,7 +41,7 @@
   ],
   "homepage": "https://caedral.com/docs/n8n-overview",
   "bugs": {
-    "url": "https://github.com/caedral/n8n-nodes-caedral/issues"
+    "url": "https://github.com/trycaedral/n8n-nodes-caedral/issues"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,

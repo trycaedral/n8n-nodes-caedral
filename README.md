@@ -107,7 +107,7 @@ The credential is validated by calling `GET /v1/usage` on save.
 ## Development
 
 ```bash
-git clone https://github.com/caedral/n8n-nodes-caedral.git
+git clone https://github.com/trycaedral/n8n-nodes-caedral.git
 cd n8n-nodes-caedral
 npm install
 npm run build
@@ -132,7 +132,7 @@ npm test
 - [Caedral Documentation](https://caedral.com/docs)
 - [API Reference](https://caedral.com/docs/api-reference)
 - [n8n Integration Guide](https://caedral.com/docs/n8n-overview)
-- [Report Issues](https://github.com/caedral/n8n-nodes-caedral/issues)
+- [Report Issues](https://github.com/trycaedral/n8n-nodes-caedral/issues)
 
 ## License
 

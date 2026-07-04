@@ -33,7 +33,6 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "scan:local": "node scripts/scan-local.mjs",
     "prepublishOnly": "npm run build"
   },
   "files": [
@@ -58,7 +57,6 @@
     ]
   },
   "devDependencies": {
-    "@n8n/scan-community-package": "0.24.0",
     "@types/node": "^20",
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",

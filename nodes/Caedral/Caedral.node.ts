@@ -324,18 +324,32 @@ export class Caedral implements INodeType {
 
         if (operation === "chatCompletion") {
           const model = this.getNodeParameter("model", itemIndex) as string;
-          const messageMode = this.getNodeParameter("messageMode", itemIndex) as "simple" | "json";
-          const message = this.getNodeParameter("message", itemIndex) as string;
-          const messagesJson = this.getNodeParameter("messagesJson", itemIndex);
-          const temperature = this.getNodeParameter("temperature", itemIndex) as number;
-          const maxTokens = this.getNodeParameter("maxTokens", itemIndex) as number;
-          const systemPrompt = this.getNodeParameter("systemPrompt", itemIndex, "") as string;
+          const messageMode = this.getNodeParameter("messageMode", itemIndex, "simple") as
+            | "simple"
+            | "json";
+          // "message"/"systemPrompt" only exist in simple mode and "messagesJson"
+          // only in json mode (displayOptions); reading a hidden parameter without
+          // a fallback makes getNodeParameter throw "Could not get parameter".
+          const message =
+            messageMode === "simple"
+              ? (this.getNodeParameter("message", itemIndex, "") as string)
+              : "";
+          const messagesJson =
+            messageMode === "json"
+              ? this.getNodeParameter("messagesJson", itemIndex, "[]")
+              : undefined;
+          const temperature = this.getNodeParameter("temperature", itemIndex, 1) as number;
+          const maxTokens = this.getNodeParameter("maxTokens", itemIndex, 0) as number;
+          const systemPrompt =
+            messageMode === "simple"
+              ? (this.getNodeParameter("systemPrompt", itemIndex, "") as string)
+              : "";
 
           const body = buildChatCompletionBody({
             model,
             messageMode,
             message,
-            messagesJson: messagesJson as string | ChatMessage[],
+            messagesJson: messagesJson as string | ChatMessage[] | undefined,
             temperature: temperature === 1 ? undefined : temperature,
             maxTokens: maxTokens > 0 ? maxTokens : undefined,
             systemPrompt: systemPrompt?.trim() || undefined,

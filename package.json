@@ -1,0 +1,71 @@
+{
+  "name": "n8n-nodes-caedral",
+  "version": "0.3.0",
+  "description": "n8n community node for Caedral AI — chat, images, embeddings, audio, rerank, AI agents, vector stores, and triggers",
+  "license": "MIT",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "caedral",
+    "ai",
+    "llm",
+    "chatgpt",
+    "openai",
+    "embeddings",
+    "image-generation",
+    "rerank",
+    "ai-agent",
+    "vector-store",
+    "embeddings-model",
+    "reranker"
+  ],
+  "author": {
+    "name": "Caedral",
+    "email": "hello@caedral.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/caedral/n8n-nodes-caedral"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && node scripts/copy-assets.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "homepage": "https://caedral.com/docs/n8n-overview",
+  "bugs": {
+    "url": "https://github.com/caedral/n8n-nodes-caedral/issues"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/CaedralApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Caedral/Caedral.node.js",
+      "dist/nodes/CaedralChatModel/CaedralChatModel.node.js",
+      "dist/nodes/CaedralEmbeddings/CaedralEmbeddings.node.js",
+      "dist/nodes/CaedralReranker/CaedralReranker.node.js",
+      "dist/nodes/CaedralTrigger/CaedralTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^16.4.7",
+    "n8n-workflow": "^1.82.0",
+    "postgres": "^3.4.9",
+    "typescript": "^5",
+    "vitest": "^3.0.9"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

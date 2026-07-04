@@ -1,0 +1,16 @@
+{
+  "node": "n8n-nodes-caedral.caedralEmbeddings",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["AI"],
+  "subcategories": {
+    "AI": ["Embeddings"]
+  },
+  "resources": {
+    "primaryDocumentation": [
+      {
+        "url": "https://caedral.com/docs/n8n-overview"
+      }
+    ]
+  }
+}

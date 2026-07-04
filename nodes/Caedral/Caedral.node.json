@@ -1,0 +1,21 @@
+{
+  "node": "n8n-nodes-caedral",
+  "nodeVersion": "2.0",
+  "codexVersion": "1.0",
+  "categories": ["Development", "AI"],
+  "subcategories": {
+    "AI": ["Agents", "Miscellaneous"]
+  },
+  "resources": {
+    "primaryDocumentation": [
+      {
+        "url": "https://caedral.com/docs/n8n-overview"
+      }
+    ],
+    "credentialDocumentation": [
+      {
+        "url": "https://caedral.com/docs/authentication"
+      }
+    ]
+  }
+}

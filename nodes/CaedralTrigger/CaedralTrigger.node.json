@@ -1,0 +1,13 @@
+{
+  "node": "n8n-nodes-caedral",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["Development", "AI"],
+  "resources": {
+    "primaryDocumentation": [
+      {
+        "url": "https://caedral.com/docs/n8n-overview"
+      }
+    ]
+  }
+}

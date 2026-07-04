@@ -1,4 +1,5 @@
 import type {
+  IAuthenticateGeneric,
   ICredentialTestRequest,
   ICredentialType,
   INodeProperties,
@@ -25,6 +26,16 @@ export class CaedralApi implements ICredentialType {
     light: "file:../../icons/caedral.svg",
     dark: "file:../../icons/caedral.dark.svg",
   } as const;
+
+  authenticate: IAuthenticateGeneric = {
+    type: "generic",
+    properties: {
+      headers: {
+        Authorization: "=Bearer {{$credentials.apiKey}}",
+        Accept: "application/json",
+      },
+    },
+  };
 
   properties: INodeProperties[] = [
     {

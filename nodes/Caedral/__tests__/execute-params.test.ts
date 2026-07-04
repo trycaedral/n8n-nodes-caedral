@@ -28,7 +28,7 @@ const CHAT_RESPONSE = {
 };
 
 function createContext(visibleParams: Record<string, unknown>) {
-  const httpRequest = vi.fn(async () => ({
+  const httpRequestWithAuthentication = vi.fn(async () => ({
     statusCode: 200,
     body: CHAT_RESPONSE,
   }));
@@ -51,15 +51,15 @@ function createContext(visibleParams: Record<string, unknown>) {
       parameters: visibleParams,
     }),
     continueOnFail: () => false,
-    helpers: { httpRequest },
+    helpers: { httpRequestWithAuthentication },
   } as unknown as IExecuteFunctions;
 
-  return { context, httpRequest };
+  return { context, httpRequestWithAuthentication };
 }
 
 describe("Caedral node — chatCompletion parameter retrieval", () => {
   it("Simple mode works without messagesJson stored (hidden by displayOptions)", async () => {
-    const { context, httpRequest } = createContext({
+    const { context, httpRequestWithAuthentication } = createContext({
       operation: "chatCompletion",
       model: "caedral-base",
       messageMode: "simple",
@@ -73,8 +73,8 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
     const node = new Caedral();
     const result = await node.execute.call(context);
 
-    expect(httpRequest).toHaveBeenCalledTimes(1);
-    const request = httpRequest.mock.calls[0]?.[0] as unknown as {
+    expect(httpRequestWithAuthentication).toHaveBeenCalledTimes(1);
+    const request = httpRequestWithAuthentication.mock.calls[0]?.[1] as unknown as {
       url: string;
       body: { messages: Array<{ role: string; content: string }> };
     };
@@ -87,7 +87,7 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
   });
 
   it("JSON mode works without message/systemPrompt stored (hidden by displayOptions)", async () => {
-    const { context, httpRequest } = createContext({
+    const { context, httpRequestWithAuthentication } = createContext({
       operation: "chatCompletion",
       model: "caedral-base",
       messageMode: "json",
@@ -100,8 +100,8 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
     const node = new Caedral();
     const result = await node.execute.call(context);
 
-    expect(httpRequest).toHaveBeenCalledTimes(1);
-    const request = httpRequest.mock.calls[0]?.[0] as unknown as {
+    expect(httpRequestWithAuthentication).toHaveBeenCalledTimes(1);
+    const request = httpRequestWithAuthentication.mock.calls[0]?.[1] as unknown as {
       body: { messages: Array<{ role: string; content: string }> };
     };
     expect(request.body.messages).toEqual([{ role: "user", content: "From JSON" }]);

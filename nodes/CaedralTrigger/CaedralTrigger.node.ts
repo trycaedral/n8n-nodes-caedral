@@ -10,13 +10,11 @@ import { NodeConnectionTypes } from "n8n-workflow";
 import { buildRequestUrl, normalizeBaseUrl, type UsageResponse } from "../Caedral/helpers";
 
 type CaedralCredentials = {
-  apiKey: string;
   baseUrl?: string;
 };
 
 /**
- * Caedral Trigger — a polling trigger node that fires when the
- * account balance drops below a user-defined threshold.
+ * Caedral Trigger — polling trigger for balance and pool usage alerts.
  */
 export class CaedralTrigger implements INodeType {
   description: INodeTypeDescription = {
@@ -85,19 +83,17 @@ export class CaedralTrigger implements INodeType {
   async poll(this: IPollFunctions): Promise<INodeExecutionData[][] | null> {
     const credentials = (await this.getCredentials("caedralApi")) as CaedralCredentials;
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
-    const apiKey = credentials.apiKey;
     const triggerCondition = this.getNodeParameter("triggerCondition") as string;
 
-    const url = buildRequestUrl(baseUrl, "/v1/usage");
-    const response = (await this.helpers.httpRequest({
-      method: "GET",
-      url,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
+    const response = (await this.helpers.httpRequestWithAuthentication.call(
+      this,
+      "caedralApi",
+      {
+        method: "GET",
+        url: buildRequestUrl(baseUrl, "/v1/usage"),
+        json: true,
       },
-      json: true,
-    })) as UsageResponse;
+    )) as UsageResponse;
 
     if (triggerCondition === "balanceBelow") {
       const threshold = this.getNodeParameter("balanceThreshold") as number;

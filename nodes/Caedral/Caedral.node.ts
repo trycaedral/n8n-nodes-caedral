@@ -22,7 +22,6 @@ import {
 } from "./helpers";
 
 type CaedralCredentials = {
-  apiKey: string;
   baseUrl?: string;
 };
 
@@ -38,7 +37,7 @@ export class Caedral implements INodeType {
     version: 2,
     subtitle: '={{$parameter["operation"]}}',
     description:
-      "Call Caedral AI models — chat, images, embeddings, audio, rerank, and account management",
+      "Call Caedral AI — chat (Base/Titan/Olympus/Primordial), vision, embed, voice, rerank, and account APIs. API usage bills from prepaid balance.",
     defaults: {
       name: "Caedral",
     },
@@ -188,7 +187,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "A futuristic city skyline at sunset, digital art",
-        description: "Text description of the image to generate",
+        description: "Text description of the image to generate (caedral-vision — $3.33/1M tokens)",
       },
       {
         displayName: "Size",
@@ -224,7 +223,7 @@ export class Caedral implements INodeType {
         required: true,
         placeholder: "The quick brown fox jumps over the lazy dog.",
         description:
-          "Text to embed. For multiple texts, provide a JSON array of strings.",
+          "Text to embed via caedral-embed ($0.028/1M tokens). For multiple texts, provide a JSON array of strings.",
       },
 
       // --- Audio params ---
@@ -237,7 +236,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "Welcome to Caedral, the unified AI platform.",
-        description: "Text to convert to speech",
+        description: "Text to convert to speech via caedral-voice ($11.38/1M tokens)",
       },
       {
         displayName: "Voice",
@@ -266,7 +265,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "What is the capital of France?",
-        description: "The search query to rank documents against",
+        description: "The search query to rank documents against (caedral-rerank — $0.001/search)",
       },
       {
         displayName: "Documents",
@@ -294,7 +293,6 @@ export class Caedral implements INodeType {
     const returnData: INodeExecutionData[] = [];
     const credentials = (await this.getCredentials("caedralApi")) as CaedralCredentials;
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
-    const apiKey = credentials.apiKey;
 
     for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
       try {
@@ -302,7 +300,7 @@ export class Caedral implements INodeType {
 
         if (operation === "listModels") {
           const response = await caedralRequest<{ object: string; data: IDataObject[] }>(
-            this, baseUrl, apiKey, "GET", "/v1/models",
+            this, baseUrl, "GET", "/v1/models",
           );
           returnData.push({
             json: { models: response.data } as IDataObject,
@@ -313,7 +311,7 @@ export class Caedral implements INodeType {
 
         if (operation === "getUsage" || operation === "getAccountInfo") {
           const usage = await caedralRequest<UsageResponse>(
-            this, baseUrl, apiKey, "GET", "/v1/usage",
+            this, baseUrl, "GET", "/v1/usage",
           );
           returnData.push({
             json: formatUsageForOutput(usage) as IDataObject,
@@ -356,7 +354,7 @@ export class Caedral implements INodeType {
           });
 
           const response = await caedralRequest<ChatCompletionResponse>(
-            this, baseUrl, apiKey, "POST", "/v1/chat/completions", body,
+            this, baseUrl, "POST", "/v1/chat/completions", body,
           );
 
           const parsed = parseChatCompletionResponse(response);
@@ -390,7 +388,7 @@ export class Caedral implements INodeType {
           if (n > 1) body.n = n;
 
           const response = await caedralRequest<IDataObject>(
-            this, baseUrl, apiKey, "POST", "/v1/images/generations", body,
+            this, baseUrl, "POST", "/v1/images/generations", body,
           );
 
           returnData.push({
@@ -424,7 +422,7 @@ export class Caedral implements INodeType {
           };
 
           const response = await caedralRequest<IDataObject>(
-            this, baseUrl, apiKey, "POST", "/v1/embeddings", body,
+            this, baseUrl, "POST", "/v1/embeddings", body,
           );
 
           returnData.push({
@@ -449,7 +447,7 @@ export class Caedral implements INodeType {
           };
 
           const response = await caedralRequest<IDataObject>(
-            this, baseUrl, apiKey, "POST", "/v1/audio/speech", body,
+            this, baseUrl, "POST", "/v1/audio/speech", body,
           );
 
           returnData.push({
@@ -493,7 +491,7 @@ export class Caedral implements INodeType {
           if (topN > 0) body.top_n = topN;
 
           const response = await caedralRequest<IDataObject>(
-            this, baseUrl, apiKey, "POST", "/v1/rerank", body,
+            this, baseUrl, "POST", "/v1/rerank", body,
           );
 
           returnData.push({
@@ -530,7 +528,6 @@ export class Caedral implements INodeType {
 async function caedralRequest<T>(
   context: IExecuteFunctions,
   baseUrl: string,
-  apiKey: string,
   method: "GET" | "POST",
   path: string,
   body?: Record<string, unknown>,
@@ -550,7 +547,6 @@ async function caedralRequest<T>(
       method,
       url,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
       json: true,
@@ -563,7 +559,11 @@ async function caedralRequest<T>(
       requestOptions.body = body;
     }
 
-    const response = await context.helpers.httpRequest(requestOptions);
+    const response = await context.helpers.httpRequestWithAuthentication.call(
+      context,
+      "caedralApi",
+      requestOptions,
+    );
     const statusCode = response.statusCode as number;
     const responseBody = response.body as T | CaedralApiErrorBody;
 

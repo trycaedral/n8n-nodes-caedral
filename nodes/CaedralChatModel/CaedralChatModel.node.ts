@@ -34,7 +34,7 @@ export class CaedralChatModel implements INodeType {
     },
     group: ["transform"],
     version: 1,
-    description: "Use Caedral models with AI Agent and Chain nodes",
+    description: "Use Caedral chat tiers with AI Agent and Chain nodes (prepaid API balance)",
     defaults: {
       name: "Caedral Chat Model",
     },

@@ -74,7 +74,8 @@ export class CaedralReranker implements INodeType {
         name: "model",
         type: "string",
         default: "caedral-rerank",
-        description: "Reranking model to use",
+        description:
+          "Reranking model (caedral-rerank — $0.001/search, nvidia/llama-nemotron-rerank-vl-1b-v2:free)",
       },
       {
         displayName: "Top N",

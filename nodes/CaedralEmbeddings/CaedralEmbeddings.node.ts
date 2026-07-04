@@ -66,7 +66,7 @@ export class CaedralEmbeddings implements INodeType {
         type: "string",
         default: "caedral-embed",
         description:
-          "Embedding model to use. Caedral Embed provides high-quality 1536-dimension vectors.",
+          "Embedding model (caedral-embed — $0.028/1M tokens, openai/text-embedding-3-small). 1536-dimension vectors.",
       },
       {
         displayName: "Batch Size",

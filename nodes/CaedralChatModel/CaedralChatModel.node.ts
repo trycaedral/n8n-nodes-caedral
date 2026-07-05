@@ -6,13 +6,8 @@ import type {
 } from "n8n-workflow";
 import { NodeConnectionTypes } from "n8n-workflow";
 
-import {
-  MODEL_OPTIONS,
-  normalizeBaseUrl,
-  buildRequestUrl,
-  type ChatMessage,
-  type ChatCompletionResponse,
-} from "../Caedral/helpers";
+import { MODEL_OPTIONS, normalizeBaseUrl } from "../Caedral/helpers";
+import { CaedralLangChainChatModel } from "./caedral-langchain-model";
 
 type CaedralCredentials = {
   apiKey: string;
@@ -94,107 +89,18 @@ export class CaedralChatModel implements INodeType {
     const temperature = this.getNodeParameter("temperature", itemIndex) as number;
     const maxTokens = this.getNodeParameter("maxTokens", itemIndex) as number;
 
-    const helpers = this.helpers;
-
-    const chatModel = {
-      lc_namespace: ["langchain", "chat_models", "caedral"],
-
-      async invoke(messages: Array<{ role: string; content: string }>) {
-        const url = buildRequestUrl(baseUrl, "/v1/chat/completions");
-        const body = {
-          model,
-          messages: messages as ChatMessage[],
-          temperature,
-          max_tokens: maxTokens,
-        };
-
-        const response = (await helpers.httpRequest({
-          method: "POST",
-          url,
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body,
-          json: true,
-        })) as ChatCompletionResponse;
-
-        const content = response.choices?.[0]?.message?.content ?? "";
-        return { content };
-      },
-
-      async _generate(
-        messages: Array<{ role?: string; content?: string; _getType?: () => string }>,
-        _options?: Record<string, unknown>,
-      ) {
-        const formatted = messages.map((m) => {
-          let role = "user";
-          if (typeof m._getType === "function") {
-            const type = m._getType();
-            if (type === "system" || type === "SystemMessage") role = "system";
-            else if (type === "ai" || type === "AIMessage") role = "assistant";
-            else if (type === "human" || type === "HumanMessage") role = "user";
-            else role = type;
-          } else if (m.role) {
-            role = m.role;
-          }
-          return { role, content: String(m.content ?? "") };
-        });
-
-        const url = buildRequestUrl(baseUrl, "/v1/chat/completions");
-        const body = {
-          model,
-          messages: formatted,
-          temperature,
-          max_tokens: maxTokens,
-        };
-
-        const response = (await helpers.httpRequest({
-          method: "POST",
-          url,
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body,
-          json: true,
-        })) as ChatCompletionResponse;
-
-        const content = response.choices?.[0]?.message?.content ?? "";
-        const usage = response.usage;
-
-        return {
-          generations: [
-            [
-              {
-                text: content,
-                message: { content, role: "assistant" },
-                generationInfo: {
-                  finishReason: response.choices?.[0]?.finish_reason ?? "stop",
-                },
-              },
-            ],
-          ],
-          llmOutput: {
-            tokenUsage: {
-              completionTokens: usage?.completion_tokens ?? 0,
-              promptTokens: usage?.prompt_tokens ?? 0,
-              totalTokens: usage?.total_tokens ?? 0,
-            },
-          },
-        };
-      },
-
-      _llmType() {
-        return "caedral";
-      },
-
-      _modelType() {
-        return "base_chat_model";
-      },
-    };
+    const chatModel = new CaedralLangChainChatModel({
+      baseUrl,
+      apiKey,
+      model,
+      temperature,
+      maxTokens,
+      httpRequest: (options) =>
+        this.helpers.httpRequest({
+          ...options,
+          body: options.body as Record<string, unknown>,
+        }),
+    });
 
     return {
       response: chatModel,

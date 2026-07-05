@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-caedral",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "n8n community node for Caedral AI — chat, images, embeddings, audio, rerank, AI agents, vector stores, and triggers",
   "license": "MIT",
   "keywords": [

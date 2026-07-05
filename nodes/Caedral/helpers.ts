@@ -50,7 +50,15 @@ export type ChatCompletionResponse = {
   model?: string;
   choices?: Array<{
     index?: number;
-    message?: { role?: string; content?: string | null };
+    message?: {
+      role?: string;
+      content?: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: "function";
+        function: { name: string; arguments: string };
+      }>;
+    };
     finish_reason?: string | null;
   }>;
   usage?: {

@@ -93,7 +93,7 @@ Polling trigger for account conditions (configure interval in n8n trigger settin
 
 ## Models & pricing
 
-Pricing sources: [caedral.com/pricing](https://caedral.com/pricing), `site/src/content/site.ts`, `site/src/content/models.ts`, `api-gateway/src/config/specialized-products.ts`.
+Authoritative pricing: [caedral.com/pricing](https://caedral.com/pricing) and [caedral.com/models](https://caedral.com/models).
 
 ### Chat tiers
 

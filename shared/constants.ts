@@ -1,6 +1,6 @@
 export const DEFAULT_BASE_URL = "https://api.caedral.com";
 
-/** Chat tier pricing — source: site/src/content/site.ts tokenRates */
+/** Chat tier pricing — see caedral.com/pricing */
 export const CHAT_TIER_PRICING = {
   base: "Free (200K/wk fair use)",
   titan: "$1 in / $5 out per 1M tokens",
@@ -8,7 +8,7 @@ export const CHAT_TIER_PRICING = {
   primordial: "$5 in / $25 out per 1M tokens",
 } as const;
 
-/** Specialized product pricing — source: api-gateway/src/config/specialized-products.ts */
+/** Specialized product pricing — see caedral.com/models */
 export const SPECIALIZED_PRICING = {
   vision: "$3.33 / 1M tokens",
   embed: "$0.028 / 1M tokens",

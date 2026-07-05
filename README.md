@@ -97,21 +97,21 @@ Pricing sources: [caedral.com/pricing](https://caedral.com/pricing), `site/src/c
 
 ### Chat tiers
 
-| Model ID | Tier | Upstream model | API pricing |
-|----------|------|----------------|-------------|
-| `caedral-base` | Base | deepseek/deepseek-v4-flash | Free (200K/wk fair use) |
-| `caedral-titan` | Titan | anthropic/claude-haiku-4.5 | $1 in / $5 out per 1M tokens |
-| `caedral-olympus` | Olympus | anthropic/claude-sonnet-5 | $2 in / $10 out per 1M tokens |
-| `caedral-primordial` | Primordial | anthropic/claude-opus-4.8 | $5 in / $25 out per 1M tokens |
+| Model ID | Tier | API pricing |
+|----------|------|-------------|
+| `caedral-base` | Base | Free (200K/wk fair use) |
+| `caedral-titan` | Titan | $1 in / $5 out per 1M tokens |
+| `caedral-olympus` | Olympus | $2 in / $10 out per 1M tokens |
+| `caedral-primordial` | Primordial | $5 in / $25 out per 1M tokens |
 
 ### Specialized products
 
-| Model ID | Modality | Upstream model | API pricing |
-|----------|----------|----------------|-------------|
-| `caedral-vision` | Image generation | google/gemini-3.1-flash-image | $3.33 / 1M tokens |
-| `caedral-embed` | Embeddings | openai/text-embedding-3-small | $0.028 / 1M tokens |
-| `caedral-voice` | Audio / TTS | openai/gpt-audio | $11.38 / 1M tokens |
-| `caedral-rerank` | Reranking | nvidia/llama-nemotron-rerank-vl-1b-v2:free | $0.001 per search |
+| Model ID | Modality | API pricing |
+|----------|----------|-------------|
+| `caedral-vision` | Image generation | $3.33 / 1M tokens |
+| `caedral-embed` | Embeddings | $0.028 / 1M tokens |
+| `caedral-voice` | Audio / TTS | $11.38 / 1M tokens |
+| `caedral-rerank` | Reranking | $0.001 per search |
 
 ## Example workflows
 

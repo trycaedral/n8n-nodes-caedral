@@ -1,32 +1,31 @@
 import { DEFAULT_BASE_URL } from "../../shared/constants";
 import {
   CHAT_TIER_PRICING,
-  CHAT_UPSTREAM_MODELS,
   SPECIALIZED_PRICING,
 } from "../../shared/constants";
 
-export { DEFAULT_BASE_URL, CHAT_TIER_PRICING, CHAT_UPSTREAM_MODELS, SPECIALIZED_PRICING };
+export { DEFAULT_BASE_URL, CHAT_TIER_PRICING, SPECIALIZED_PRICING };
 
 export const MODEL_OPTIONS = [
   {
     name: "Base (Free)",
     value: "caedral-base",
-    description: `${CHAT_TIER_PRICING.base} — upstream ${CHAT_UPSTREAM_MODELS["caedral-base"]}`,
+    description: CHAT_TIER_PRICING.base,
   },
   {
     name: "Titan",
     value: "caedral-titan",
-    description: `${CHAT_TIER_PRICING.titan} — upstream ${CHAT_UPSTREAM_MODELS["caedral-titan"]}`,
+    description: CHAT_TIER_PRICING.titan,
   },
   {
     name: "Olympus",
     value: "caedral-olympus",
-    description: `${CHAT_TIER_PRICING.olympus} — upstream ${CHAT_UPSTREAM_MODELS["caedral-olympus"]}`,
+    description: CHAT_TIER_PRICING.olympus,
   },
   {
     name: "Primordial",
     value: "caedral-primordial",
-    description: `${CHAT_TIER_PRICING.primordial} — upstream ${CHAT_UPSTREAM_MODELS["caedral-primordial"]}`,
+    description: CHAT_TIER_PRICING.primordial,
   },
 ] as const;
 

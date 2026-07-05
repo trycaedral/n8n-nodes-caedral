@@ -1,5 +1,3 @@
-import { RunnableBinding } from "@langchain/core/runnables";
-import { HumanMessage } from "@langchain/core/messages";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -22,7 +20,7 @@ const calculatorTool = {
 };
 
 describe("CaedralLangChainChatModel", () => {
-  it("exposes bindTools returning a LangChain RunnableBinding", () => {
+  it("exposes bindTools returning a LangChain-compatible Runnable", () => {
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
       apiKey: "test-key",
@@ -33,12 +31,14 @@ describe("CaedralLangChainChatModel", () => {
     });
 
     expect(model.lc_namespace).toContain("chat_models");
+    expect(model.lc_runnable).toBe(true);
     expect(typeof model.bindTools).toBe("function");
     expect(model._modelType()).toBe("base_chat_model");
 
     const bound = model.bindTools([calculatorTool]);
 
-    expect(bound).toBeInstanceOf(RunnableBinding);
+    expect(bound.lc_runnable).toBe(true);
+    expect(bound.bound).toBe(model);
     expect(bound).not.toBe(model);
     expect(typeof bound.invoke).toBe("function");
   });
@@ -74,7 +74,9 @@ describe("CaedralLangChainChatModel", () => {
     });
 
     const bound = model.bindTools([calculatorTool]);
-    const result = await bound.invoke([new HumanMessage("What is 1 + 2?")]);
+    const result = await bound.invoke([
+      { _getType: () => "human", content: "What is 1 + 2?" },
+    ]);
 
     expect(httpRequest).toHaveBeenCalledOnce();
     const requestBody = httpRequest.mock.calls[0][0].body as Record<string, unknown>;
@@ -135,7 +137,7 @@ describe("CaedralLangChainChatModel", () => {
     });
 
     const result = await model._generate(
-      [new HumanMessage("What is 1 + 2?")],
+      [{ _getType: () => "human", content: "What is 1 + 2?" }],
       { tools: [calculatorTool], tool_choice: "auto" },
     );
 
@@ -166,7 +168,7 @@ describe("CaedralLangChainChatModel", () => {
         type: "tool_call",
       },
     ]);
-    expect(generation.generationInfo?.finishReason).toBe("tool_calls");
+    expect(generation.generationInfo.finishReason).toBe("tool_calls");
   });
 
   it("maps LangChain tool and assistant tool-call messages to OpenAI format", () => {

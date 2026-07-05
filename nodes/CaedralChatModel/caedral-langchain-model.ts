@@ -1,3 +1,18 @@
+import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
+import type { BaseLanguageModelInput } from "@langchain/core/language_models/base";
+import {
+  BaseChatModel,
+  type BaseChatModelCallOptions,
+  type BaseChatModelParams,
+  type BindToolsInput,
+} from "@langchain/core/language_models/chat_models";
+import {
+  AIMessage,
+  AIMessageChunk,
+  type BaseMessage,
+} from "@langchain/core/messages";
+import type { ChatGeneration, ChatResult } from "@langchain/core/outputs";
+import { type Runnable, RunnableBinding } from "@langchain/core/runnables";
 import type { IHttpRequestMethods } from "n8n-workflow";
 
 import {
@@ -57,14 +72,13 @@ type LangChainMessage = {
   _getType?: () => string;
 };
 
-type CaedralChatModelConfig = {
+export type CaedralChatModelFields = BaseChatModelParams & {
   baseUrl: string;
   apiKey: string;
   model: string;
   temperature: number;
   maxTokens: number;
   httpRequest: HttpRequestFn;
-  boundTools?: unknown[];
 };
 
 function normalizeToolArguments(args: unknown): string {
@@ -142,6 +156,27 @@ function zodObjectToJsonSchema(schema: unknown): Record<string, unknown> {
 
 export function langChainToolToOpenAI(tool: unknown): OpenAIToolDefinition {
   const record = tool as Record<string, unknown>;
+
+  if (
+    record.type === "function" &&
+    typeof record.function === "object" &&
+    record.function !== null
+  ) {
+    const fn = record.function as {
+      name?: string;
+      description?: string;
+      parameters?: Record<string, unknown>;
+    };
+    return {
+      type: "function",
+      function: {
+        name: String(fn.name ?? ""),
+        description: String(fn.description ?? ""),
+        parameters: fn.parameters ?? { type: "object", properties: {} },
+      },
+    };
+  }
+
   const kwargs = (record.lc_kwargs ?? {}) as Record<string, unknown>;
   const name = String(record.name ?? kwargs.name ?? "");
   const description = String(record.description ?? kwargs.description ?? "");
@@ -288,88 +323,95 @@ function parseResponseToolCalls(
     .filter((call): call is LangChainToolCall => call !== null);
 }
 
-function createAIMessage(content: string | null, toolCalls: LangChainToolCall[]) {
-  const additionalToolCalls =
-    toolCalls.length > 0
-      ? toolCalls.map((call) => ({
-          id: call.id,
-          type: "function",
-          function: {
-            name: call.name,
-            arguments: normalizeToolArguments(call.args),
-          },
-        }))
-      : undefined;
-
-  return {
+function createAIMessage(content: string | null, toolCalls: LangChainToolCall[]): AIMessage {
+  return new AIMessage({
     content: content ?? "",
-    role: "assistant",
-    tool_calls: toolCalls,
-    additional_kwargs: additionalToolCalls
-      ? { tool_calls: additionalToolCalls }
-      : {},
-    _getType() {
-      return "ai";
-    },
-  };
+    tool_calls:
+      toolCalls.length > 0
+        ? toolCalls.map((call) => ({
+            id: call.id ?? `call_${crypto.randomUUID()}`,
+            name: call.name,
+            args: call.args,
+            type: "tool_call",
+          }))
+        : [],
+  });
 }
 
-export class CaedralLangChainChatModel {
-  lc_namespace = ["langchain", "chat_models", "caedral"];
+function extractToolsFromOptions(options: BaseChatModelCallOptions): unknown[] {
+  const tools = (options as { tools?: unknown }).tools;
+  return Array.isArray(tools) ? tools : [];
+}
 
-  private readonly config: CaedralChatModelConfig;
+export class CaedralLangChainChatModel extends BaseChatModel {
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
+  private readonly modelName: string;
+  private readonly temperature: number;
+  private readonly maxTokens: number;
+  private readonly httpRequest: HttpRequestFn;
 
-  constructor(config: CaedralChatModelConfig) {
-    this.config = config;
+  constructor(fields: CaedralChatModelFields) {
+    super(fields);
+    this.baseUrl = fields.baseUrl;
+    this.apiKey = fields.apiKey;
+    this.modelName = fields.model;
+    this.temperature = fields.temperature;
+    this.maxTokens = fields.maxTokens;
+    this.httpRequest = fields.httpRequest;
   }
 
-  _llmType() {
+  _llmType(): string {
     return "caedral";
   }
 
-  _modelType() {
-    return "base_chat_model";
+  get callKeys(): string[] {
+    return [...super.callKeys, "tools", "tool_choice"];
   }
 
-  bindTools(tools: unknown[]): CaedralLangChainChatModel {
-    return new CaedralLangChainChatModel({
-      ...this.config,
-      boundTools: tools,
+  bindTools(
+    tools: BindToolsInput[],
+    kwargs?: Partial<BaseChatModelCallOptions>,
+  ): Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions> {
+    return new RunnableBinding<
+      BaseLanguageModelInput,
+      AIMessageChunk,
+      BaseChatModelCallOptions
+    >({
+      bound: this,
+      kwargs: { tools, tool_choice: "auto", ...kwargs } as Partial<BaseChatModelCallOptions>,
+      config: {},
     });
   }
 
-  async invoke(messages: LangChainMessage[]) {
-    const result = await this._generate(messages);
-    const generation = result.generations[0]?.[0];
-    return generation?.message ?? { content: "" };
-  }
-
   async _generate(
-    messages: LangChainMessage[],
-    _options?: Record<string, unknown>,
-  ) {
+    messages: BaseMessage[],
+    options: this["ParsedCallOptions"],
+    _runManager?: CallbackManagerForLLMRun,
+  ): Promise<ChatResult> {
     const formatted = messages.flatMap((message) =>
-      langChainMessageToOpenAI(message),
+      langChainMessageToOpenAI(message as LangChainMessage),
     );
 
     const body: Record<string, unknown> = {
-      model: this.config.model,
+      model: this.modelName,
       messages: formatted,
-      temperature: this.config.temperature,
-      max_tokens: this.config.maxTokens,
+      temperature: this.temperature,
+      max_tokens: this.maxTokens,
     };
 
-    if (this.config.boundTools?.length) {
-      body.tools = this.config.boundTools.map(langChainToolToOpenAI);
-      body.tool_choice = "auto";
+    const boundTools = extractToolsFromOptions(options);
+    if (boundTools.length > 0) {
+      body.tools = boundTools.map(langChainToolToOpenAI);
+      body.tool_choice = options.tool_choice ?? "auto";
     }
 
-    const url = buildRequestUrl(this.config.baseUrl, "/v1/chat/completions");
-    const response = (await this.config.httpRequest({
+    const url = buildRequestUrl(this.baseUrl, "/v1/chat/completions");
+    const response = (await this.httpRequest({
       method: "POST",
       url,
       headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -383,19 +425,18 @@ export class CaedralLangChainChatModel {
     const toolCalls = parseResponseToolCalls(message?.tool_calls);
     const aiMessage = createAIMessage(content, toolCalls);
     const usage = response.usage;
+    const finishReason = choice?.finish_reason ?? "stop";
+
+    const generation: ChatGeneration = {
+      text: content ?? "",
+      message: aiMessage,
+      generationInfo: {
+        finishReason,
+      },
+    };
 
     return {
-      generations: [
-        [
-          {
-            text: content ?? "",
-            message: aiMessage,
-            generationInfo: {
-              finishReason: choice?.finish_reason ?? "stop",
-            },
-          },
-        ],
-      ],
+      generations: [generation],
       llmOutput: {
         tokenUsage: {
           completionTokens: usage?.completion_tokens ?? 0,

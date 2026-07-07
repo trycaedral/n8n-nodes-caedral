@@ -1,11 +1,8 @@
 {
-  "node": "n8n-nodes-caedral",
-  "nodeVersion": "2.0",
+  "node": "n8n-nodes-caedral.caedral",
+  "nodeVersion": "1.0",
   "codexVersion": "1.0",
-  "categories": ["Development", "AI"],
-  "subcategories": {
-    "AI": ["Agents", "Miscellaneous"]
-  },
+  "categories": ["Development"],
   "resources": {
     "primaryDocumentation": [
       {

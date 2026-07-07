@@ -34,10 +34,7 @@ export class CaedralChatModel implements INodeType {
       name: "Caedral Chat Model",
     },
     codex: {
-      categories: ["AI"],
-      subcategories: {
-        AI: ["Language Models", "Chat Models"],
-      },
+      categories: ["Development"],
       resources: {
         primaryDocumentation: [
           { url: "https://caedral.com/docs/n8n-overview" },

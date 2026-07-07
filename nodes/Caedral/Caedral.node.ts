@@ -15,6 +15,7 @@ import {
   MODEL_OPTIONS,
   normalizeBaseUrl,
   parseChatCompletionResponse,
+  SPECIALIZED_PRICING,
   type CaedralApiErrorBody,
   type ChatCompletionResponse,
   type ChatMessage,
@@ -187,7 +188,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "A futuristic city skyline at sunset, digital art",
-        description: "Text description of the image to generate (caedral-vision — $3.33/1M tokens)",
+        description: `Text description of the image to generate (caedral-vision — ${SPECIALIZED_PRICING.vision})`,
       },
       {
         displayName: "Size",
@@ -222,8 +223,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "The quick brown fox jumps over the lazy dog.",
-        description:
-          "Text to embed via caedral-embed ($0.028/1M tokens). For multiple texts, provide a JSON array of strings.",
+        description: `Text to embed via caedral-embed (${SPECIALIZED_PRICING.embed}). For multiple texts, provide a JSON array of strings.`,
       },
 
       // --- Audio params ---
@@ -236,7 +236,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "Welcome to Caedral, the unified AI platform.",
-        description: "Text to convert to speech via caedral-voice ($11.38/1M tokens)",
+        description: `Text to convert to speech via caedral-voice (${SPECIALIZED_PRICING.voice})`,
       },
       {
         displayName: "Voice",
@@ -265,7 +265,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "What is the capital of France?",
-        description: "The search query to rank documents against (caedral-rerank — $0.001/search)",
+        description: `The search query to rank documents against (caedral-rerank — ${SPECIALIZED_PRICING.rerank})`,
       },
       {
         displayName: "Documents",

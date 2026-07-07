@@ -1,6 +1,6 @@
-import { DEFAULT_BASE_URL } from "../../shared/constants";
 import {
   CHAT_TIER_PRICING,
+  DEFAULT_BASE_URL,
   SPECIALIZED_PRICING,
 } from "../../shared/constants";
 

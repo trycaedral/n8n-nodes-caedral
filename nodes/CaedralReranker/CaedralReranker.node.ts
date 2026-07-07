@@ -49,10 +49,7 @@ export class CaedralReranker implements INodeType {
       name: "Caedral Reranker",
     },
     codex: {
-      categories: ["AI"],
-      subcategories: {
-        AI: ["Miscellaneous"],
-      },
+      categories: ["Development"],
       resources: {
         primaryDocumentation: [
           { url: "https://caedral.com/docs/n8n-overview" },

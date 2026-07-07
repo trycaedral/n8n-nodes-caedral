@@ -1,11 +1,8 @@
 {
-  "node": "n8n-nodes-caedral",
+  "node": "n8n-nodes-caedral.caedralChatModel",
   "nodeVersion": "1.0",
   "codexVersion": "1.0",
-  "categories": ["AI"],
-  "subcategories": {
-    "AI": ["Language Models", "Chat Models"]
-  },
+  "categories": ["Development"],
   "resources": {
     "primaryDocumentation": [
       {

@@ -1,8 +1,8 @@
 {
-  "node": "n8n-nodes-caedral",
+  "node": "n8n-nodes-caedral.caedralTrigger",
   "nodeVersion": "1.0",
   "codexVersion": "1.0",
-  "categories": ["Development", "AI"],
+  "categories": ["Development"],
   "resources": {
     "primaryDocumentation": [
       {

@@ -40,10 +40,7 @@ export class CaedralEmbeddings implements INodeType {
       name: "Caedral Embeddings",
     },
     codex: {
-      categories: ["AI"],
-      subcategories: {
-        AI: ["Embeddings"],
-      },
+      categories: ["Development"],
       resources: {
         primaryDocumentation: [
           { url: "https://caedral.com/docs/n8n-overview" },

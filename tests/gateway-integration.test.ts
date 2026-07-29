@@ -32,19 +32,15 @@ async function createEphemeralKey(): Promise<{ rawKey: string; cleanup: () => Pr
 
   const userId = crypto.randomUUID();
   const keyId = crypto.randomUUID();
-  const subId = crypto.randomUUID();
   const rawKey = `cd_live_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url")}`;
   const keyPrefix = rawKey.slice(0, 16);
   const keyHash = await bcrypt.hash(rawKey, 10);
   const email = `n8n-test-${userId}@example.com`;
 
+  // Prepaid-only: $0.01 min balance for caedral-base eligibility (not charged).
   await sql`
     INSERT INTO "user" (id, name, email, email_verified, balance_cents, account_status)
-    VALUES (${userId}, ${"N8N Test"}, ${email}, ${true}, ${0}, ${"active"})
-  `;
-  await sql`
-    INSERT INTO subscriptions (id, user_id, plan, status, weekly_pool_limit, weekly_pool_used)
-    VALUES (${subId}, ${userId}, ${"pro"}, ${"active"}, ${1000000}, ${0})
+    VALUES (${userId}, ${"N8N Test"}, ${email}, ${true}, ${1}, ${"active"})
   `;
   await sql`
     INSERT INTO api_keys (id, user_id, name, key_prefix, key_hash)
@@ -53,7 +49,6 @@ async function createEphemeralKey(): Promise<{ rawKey: string; cleanup: () => Pr
 
   const cleanup = async () => {
     await sql`DELETE FROM api_keys WHERE id = ${keyId}`;
-    await sql`DELETE FROM subscriptions WHERE id = ${subId}`;
     await sql`DELETE FROM "user" WHERE id = ${userId}`;
     await sql.end();
   };
@@ -61,21 +56,23 @@ async function createEphemeralKey(): Promise<{ rawKey: string; cleanup: () => Pr
   return { rawKey, cleanup };
 }
 
-describe("n8n node — gateway integration (mirrors credential test + chat)", () => {
-  let skipIntegration = !process.env.DATABASE_URL;
+// Live HTTP tests require a running gateway. Opt in with:
+//   DATABASE_URL=... CAEDRAL_GATEWAY_LIVE=1 npm test
+const runLiveGateway =
+  Boolean(process.env.DATABASE_URL) &&
+  process.env.CAEDRAL_GATEWAY_LIVE === "1";
 
+describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors credential test + chat)", () => {
   beforeAll(async () => {
-    if (!process.env.DATABASE_URL) return;
     const healthy = await gatewayHealthy();
     if (!healthy) {
-      skipIntegration = true;
-      console.warn(
-        `[n8n integration] Gateway not reachable at ${BASE_URL} — skipping live HTTP tests`,
+      throw new Error(
+        `[n8n integration] CAEDRAL_GATEWAY_LIVE=1 but gateway not reachable at ${BASE_URL}`,
       );
     }
   });
 
-  it.skipIf(skipIntegration)(
+  it(
     "credential test: GET /v1/usage with Bearer token",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -99,7 +96,7 @@ describe("n8n node — gateway integration (mirrors credential test + chat)", ()
     30_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "chat completion operation against live gateway",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();

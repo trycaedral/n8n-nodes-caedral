@@ -55,8 +55,8 @@ Eight operations covering the full Caedral API:
 | **Generate Audio** | `POST /v1/audio/speech` | Text-to-speech via Caedral Voice |
 | **Rerank** | `POST /v1/rerank` | Semantic document reranking |
 | **List Models** | `GET /v1/models` | All available chat and specialized models |
-| **Get Usage** | `GET /v1/usage` | Pool balance, weekly usage, overage status |
-| **Get Account Info** | `GET /v1/usage` | Account status, plan, and balance details |
+| **Get Usage** | `GET /v1/usage` | Prepaid balance and account status |
+| **Get Account Info** | `GET /v1/usage` | Prepaid balance and account status |
 
 Chat supports **Simple** mode (single message + optional system prompt) or **JSON** mode (full messages array).
 
@@ -89,29 +89,28 @@ Polling trigger for account conditions (configure interval in n8n trigger settin
 | Condition | Fires when |
 |-----------|------------|
 | **Balance Below Threshold** | Prepaid balance in cents drops below your threshold |
-| **Pool Usage Above Percentage** | Weekly chat pool usage exceeds a percentage |
 
 ## Models & pricing
 
-Authoritative pricing: [caedral.com/pricing](https://caedral.com/pricing) and [caedral.com/models](https://caedral.com/models).
+Authoritative pricing: [caedral.com/pricing](https://caedral.com/pricing) and [caedral.com/models](https://caedral.com/models). All API usage bills from **prepaid balance** only.
 
 ### Chat tiers
 
 | Model ID | Tier | API pricing |
 |----------|------|-------------|
-| `caedral-base` | Base | Free (200K/wk fair use) |
-| `caedral-titan` | Titan | $1 in / $5 out per 1M tokens |
-| `caedral-olympus` | Olympus | $2 in / $10 out per 1M tokens |
-| `caedral-primordial` | Primordial | $5 in / $25 out per 1M tokens |
+| `caedral-base` | Base | Free ($0.01 min balance, not charged) |
+| `caedral-titan` | Titan | $2 in / $0.20 cached / $6 out per 1M tokens |
+| `caedral-olympus` | Olympus | $5 in / $0.50 cached / $15 out per 1M tokens |
+| `caedral-primordial` | Primordial | $10 in / $1 cached / $30 out per 1M tokens |
 
 ### Specialized products
 
 | Model ID | Modality | API pricing |
 |----------|----------|-------------|
-| `caedral-vision` | Image generation | $3.33 / 1M tokens |
-| `caedral-embed` | Embeddings | $0.028 / 1M tokens |
-| `caedral-voice` | Audio / TTS | $11.38 / 1M tokens |
-| `caedral-rerank` | Reranking | $0.001 per search |
+| `caedral-vision` | Image generation | $5 / 1M tokens |
+| `caedral-embed` | Embeddings | Free until 28 Sep 2026 (130 RPM, $0.01 gate) · then $0.001 / 1M tokens |
+| `caedral-voice` | Audio / TTS | $15 / 1M tokens |
+| `caedral-rerank` | Reranking | Free until 28 Sep 2026 (130 RPM, $0.01 gate) · then $0.0005 per search |
 
 ## Example workflows
 

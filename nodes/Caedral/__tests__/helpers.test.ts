@@ -156,19 +156,10 @@ describe("parseChatCompletionResponse", () => {
 });
 
 describe("formatUsageForOutput", () => {
-  it("normalizes missing fields", () => {
+  it("normalizes missing fields to prepaid shape", () => {
     expect(formatUsageForOutput({})).toEqual({
       accountStatus: "unknown",
-      plan: "free",
-      planStatus: "unknown",
       balanceCents: 0,
-      weeklyPool: { limit: 0, used: 0, remaining: 0 },
-      overage: {
-        enabled: false,
-        limitCents: null,
-        usedCents: 0,
-        remainingCents: null,
-      },
       balanceWeightedUnitsAffordable: 0,
     });
   });
@@ -180,11 +171,11 @@ describe("formatApiErrorMessage", () => {
       formatApiErrorMessage(402, {
         error: {
           type: "insufficient_balance",
-          message: "Pool exhausted",
+          message: "Insufficient prepaid balance",
           code: 402,
         },
       }),
-    ).toBe("[insufficient_balance] Pool exhausted");
+    ).toBe("[insufficient_balance] Insufficient prepaid balance");
   });
 
   it("falls back for plain text bodies", () => {

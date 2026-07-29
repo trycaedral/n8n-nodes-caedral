@@ -14,7 +14,7 @@ type CaedralCredentials = {
 };
 
 /**
- * Caedral Trigger — polling trigger for balance and pool usage alerts.
+ * Caedral Trigger — polling trigger for prepaid balance alerts.
  */
 export class CaedralTrigger implements INodeType {
   description: INodeTypeDescription = {
@@ -27,7 +27,8 @@ export class CaedralTrigger implements INodeType {
     group: ["trigger"],
     version: 1,
     subtitle: "Balance below threshold",
-    description: "Triggers when your Caedral balance drops below a specified amount",
+    description:
+      "Triggers when your Caedral prepaid balance drops below a specified amount (USD cents)",
     defaults: {
       name: "Caedral Trigger",
     },
@@ -49,12 +50,8 @@ export class CaedralTrigger implements INodeType {
           {
             name: "Balance Below Threshold",
             value: "balanceBelow",
-            description: "Trigger when account balance in cents falls below the threshold",
-          },
-          {
-            name: "Pool Usage Above Percentage",
-            value: "poolAbove",
-            description: "Trigger when weekly pool usage exceeds a percentage",
+            description:
+              "Trigger when prepaid balance in cents falls below the threshold",
           },
         ],
         default: "balanceBelow",
@@ -66,16 +63,8 @@ export class CaedralTrigger implements INodeType {
         typeOptions: { minValue: 0 },
         displayOptions: { show: { triggerCondition: ["balanceBelow"] } },
         default: 500,
-        description: "Trigger when balance drops below this amount in cents (e.g. 500 = $5.00)",
-      },
-      {
-        displayName: "Pool Usage Threshold (%)",
-        name: "poolPercentage",
-        type: "number",
-        typeOptions: { minValue: 1, maxValue: 100 },
-        displayOptions: { show: { triggerCondition: ["poolAbove"] } },
-        default: 80,
-        description: "Trigger when pool usage exceeds this percentage",
+        description:
+          "Trigger when balance drops below this amount in cents (e.g. 500 = $5.00)",
       },
     ],
   };
@@ -110,42 +99,12 @@ export class CaedralTrigger implements INodeType {
                 thresholdCents: threshold,
                 balanceFormatted: `$${(balance / 100).toFixed(2)}`,
                 thresholdFormatted: `$${(threshold / 100).toFixed(2)}`,
-                plan: response.plan ?? "unknown",
                 accountStatus: response.accountStatus ?? "unknown",
                 timestamp: new Date().toISOString(),
               } as IDataObject,
             },
           ],
         ];
-      }
-    }
-
-    if (triggerCondition === "poolAbove") {
-      const poolPercentage = this.getNodeParameter("poolPercentage") as number;
-      const poolLimit = response.weeklyPool?.limit ?? 0;
-      const poolUsed = response.weeklyPool?.used ?? 0;
-
-      if (poolLimit > 0) {
-        const usagePercent = Math.round((poolUsed / poolLimit) * 100);
-        if (usagePercent >= poolPercentage) {
-          return [
-            [
-              {
-                json: {
-                  triggered: true,
-                  condition: "poolAbove",
-                  poolUsed,
-                  poolLimit,
-                  poolRemaining: response.weeklyPool?.remaining ?? 0,
-                  usagePercent,
-                  thresholdPercent: poolPercentage,
-                  plan: response.plan ?? "unknown",
-                  timestamp: new Date().toISOString(),
-                } as IDataObject,
-              },
-            ],
-          ];
-        }
       }
     }
 

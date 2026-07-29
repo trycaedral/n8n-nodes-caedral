@@ -31,19 +31,15 @@ async function createEphemeralKey(): Promise<{
 
   const userId = crypto.randomUUID();
   const keyId = crypto.randomUUID();
-  const subId = crypto.randomUUID();
   const rawKey = `cd_live_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url")}`;
   const keyPrefix = rawKey.slice(0, 16);
   const keyHash = await bcrypt.hash(rawKey, 10);
   const email = `n8n-ops-test-${userId}@example.com`;
 
+  // Prepaid-only fixture (subscriptions table removed in API-only pivot).
   await sql`
     INSERT INTO "user" (id, name, email, email_verified, balance_cents, account_status)
     VALUES (${userId}, ${"N8N Ops Test"}, ${email}, ${true}, ${5000}, ${"active"})
-  `;
-  await sql`
-    INSERT INTO subscriptions (id, user_id, plan, status, weekly_pool_limit, weekly_pool_used)
-    VALUES (${subId}, ${userId}, ${"pro"}, ${"active"}, ${1000000}, ${0})
   `;
   await sql`
     INSERT INTO api_keys (id, user_id, name, key_prefix, key_hash)
@@ -52,7 +48,6 @@ async function createEphemeralKey(): Promise<{
 
   const cleanup = async () => {
     await sql`DELETE FROM api_keys WHERE id = ${keyId}`;
-    await sql`DELETE FROM subscriptions WHERE id = ${subId}`;
     await sql`DELETE FROM "user" WHERE id = ${userId}`;
     await sql.end();
   };
@@ -68,21 +63,24 @@ function headers(apiKey: string) {
   };
 }
 
-describe("n8n node — all operations integration", () => {
-  let skipIntegration = !process.env.DATABASE_URL;
+// Live HTTP tests require a running gateway. Opt in with:
+//   DATABASE_URL=... CAEDRAL_GATEWAY_LIVE=1 npm test
+// skipIf is evaluated at collection time — cannot flip after beforeAll.
+const runLiveGateway =
+  Boolean(process.env.DATABASE_URL) &&
+  process.env.CAEDRAL_GATEWAY_LIVE === "1";
 
+describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () => {
   beforeAll(async () => {
-    if (!process.env.DATABASE_URL) return;
     const healthy = await gatewayHealthy();
     if (!healthy) {
-      skipIntegration = true;
-      console.warn(
-        `[n8n integration] Gateway not reachable at ${BASE_URL} — skipping live HTTP tests`,
+      throw new Error(
+        `[n8n integration] CAEDRAL_GATEWAY_LIVE=1 but gateway not reachable at ${BASE_URL}`,
       );
     }
   });
 
-  it.skipIf(skipIntegration)(
+  it(
     "GET /v1/models — list models",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -104,7 +102,7 @@ describe("n8n node — all operations integration", () => {
     30_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "GET /v1/usage — get account info",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -123,7 +121,7 @@ describe("n8n node — all operations integration", () => {
     30_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "POST /v1/chat/completions — chat with system prompt",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -155,7 +153,7 @@ describe("n8n node — all operations integration", () => {
     45_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "POST /v1/embeddings — create embedding",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -186,7 +184,7 @@ describe("n8n node — all operations integration", () => {
     45_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "POST /v1/images/generations — generate image",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -214,7 +212,7 @@ describe("n8n node — all operations integration", () => {
     60_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "POST /v1/audio/speech — generate audio",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -242,7 +240,7 @@ describe("n8n node — all operations integration", () => {
     45_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "POST /v1/rerank — rerank documents",
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
@@ -278,7 +276,7 @@ describe("n8n node — all operations integration", () => {
     45_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "401 for invalid API key on protected endpoint",
     async () => {
       const url = buildRequestUrl(BASE_URL, "/v1/usage");
@@ -290,7 +288,7 @@ describe("n8n node — all operations integration", () => {
     15_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "401 for malformed API key",
     async () => {
       const url = buildRequestUrl(BASE_URL, "/v1/usage");
@@ -302,7 +300,7 @@ describe("n8n node — all operations integration", () => {
     15_000,
   );
 
-  it.skipIf(skipIntegration)(
+  it(
     "401 for missing Authorization header",
     async () => {
       const url = buildRequestUrl(BASE_URL, "/v1/usage");

@@ -1,6 +1,6 @@
 # n8n-nodes-caedral
 
-Community node for [n8n](https://n8n.io/) that integrates with [Caedral AI](https://caedral.com) — unified access to chat, vision, embeddings, voice, rerank, AI agents, vector stores, and account monitoring through one API.
+Official [n8n](https://n8n.io/) community node for [Caedral](https://caedral.com) (**v1.0.0**) — chat, vision, embeddings, voice, rerank, AI agents, and account usage through one prepaid API.
 
 ## Installation
 
@@ -39,7 +39,7 @@ Create a **Caedral API** credential:
 3. In n8n, go to **Credentials → Add credential → Caedral API**
 4. Paste your API key and save — n8n validates it with `GET /v1/usage`
 
-API usage (except `caedral-base` under fair use) bills from **prepaid balance**, not Caedral Chat plan pools. Top up at [caedral.com/dashboard/billing](https://caedral.com/dashboard/billing).
+API usage (except gated free Base / promo specialized) bills from **prepaid balance**. Top up at [caedral.com/dashboard/billing](https://caedral.com/dashboard/billing).
 
 ## Nodes
 

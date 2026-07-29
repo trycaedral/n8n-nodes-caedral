@@ -97,13 +97,13 @@ export class Caedral implements INodeType {
           {
             name: "Get Usage",
             value: "getUsage",
-            description: "Get current pool, balance, and overage status",
+            description: "Get prepaid balance and account status",
             action: "Get usage",
           },
           {
             name: "Get Account Info",
             value: "getAccountInfo",
-            description: "Get account status, plan, and balance details",
+            description: "Get prepaid balance and account status",
             action: "Get account info",
           },
         ],

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 — 2026-07-29
+
+First stable release of the official Caedral n8n community node.
+
+- Chat, embeddings, rerank, vision/audio operations, LangChain chat model nodes, and trigger
+- Pricing copy aligned with prepaid agency rates (Titan/Olympus/Primordial + specialized)
+- Codex metadata compliant with n8n Creator Portal guidelines
+
 ## 0.3.8 — 2026-07-07
 
 Codex metadata fixes for n8n Creator Portal review compliance. No functional changes to node behavior.

@@ -67,22 +67,10 @@ export type ChatCompletionResponse = {
   };
 };
 
+/** Shape of GET /v1/usage from the API gateway (prepaid only). */
 export type UsageResponse = {
   accountStatus?: string;
-  plan?: string;
-  planStatus?: string;
   balanceCents?: number;
-  weeklyPool?: {
-    limit?: number;
-    used?: number;
-    remaining?: number;
-  };
-  overage?: {
-    enabled?: boolean;
-    limitCents?: number | null;
-    usedCents?: number;
-    remainingCents?: number | null;
-  };
   balanceWeightedUnitsAffordable?: number;
 };
 
@@ -286,9 +274,9 @@ export function parseChatCompletionResponse(
 /**
  * Normalize a `GET /v1/usage` response for node output.
  *
- * Fills in defaults for any missing fields so downstream nodes can
- * rely on a stable shape (numeric zeros instead of `undefined`,
- * `"unknown"` for missing status strings, etc.).
+ * Matches the gateway prepaid shape: accountStatus, balanceCents,
+ * balanceWeightedUnitsAffordable. Legacy pool/subscription fields are
+ * not returned.
  *
  * @param usage - Raw usage response from the API.
  * @returns A fully-populated usage object with default values.
@@ -296,20 +284,7 @@ export function parseChatCompletionResponse(
 export function formatUsageForOutput(usage: UsageResponse) {
   return {
     accountStatus: usage.accountStatus ?? "unknown",
-    plan: usage.plan ?? "free",
-    planStatus: usage.planStatus ?? "unknown",
     balanceCents: usage.balanceCents ?? 0,
-    weeklyPool: {
-      limit: usage.weeklyPool?.limit ?? 0,
-      used: usage.weeklyPool?.used ?? 0,
-      remaining: usage.weeklyPool?.remaining ?? 0,
-    },
-    overage: {
-      enabled: usage.overage?.enabled ?? false,
-      limitCents: usage.overage?.limitCents ?? null,
-      usedCents: usage.overage?.usedCents ?? 0,
-      remainingCents: usage.overage?.remainingCents ?? null,
-    },
     balanceWeightedUnitsAffordable:
       usage.balanceWeightedUnitsAffordable ?? 0,
   };

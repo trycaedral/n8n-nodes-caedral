@@ -72,7 +72,7 @@ Language model sub-node for n8n **AI Agent** and **Chain** nodes. Connect its **
 
 Embedding model sub-node for n8n **Vector Store** nodes. Provides `embedDocuments` and `embedQuery` via `POST /v1/embeddings`.
 
-- Default model: `caedral-embed`
+- Default model: `caedral-embed-e1-small-v1` (Caedral E1 Small, 384 dimensions)
 - Configurable batch size (default 512)
 
 ### Caedral Reranker (Vector Store sub-node)
@@ -108,7 +108,7 @@ Authoritative pricing: [caedral.com/pricing](https://caedral.com/pricing) and [c
 | Model ID | Modality | API pricing |
 |----------|----------|-------------|
 | `caedral-vision` | Image generation | $5 / 1M tokens |
-| `caedral-embed` | Embeddings | Free until 28 Sep 2026 (130 RPM, $0.01 gate) · then $0.001 / 1M tokens |
+| `caedral-embed-e1-small-v1` | Embeddings (E1 Small, 384d) | Free until 28 Sep 2026 (130 RPM, $0.01 gate) · then $0.001 / 1M tokens |
 | `caedral-voice` | Audio / TTS | $15 / 1M tokens |
 | `caedral-rerank` | Reranking | Free until 28 Sep 2026 (130 RPM, $0.01 gate) · then $0.0005 per search |
 

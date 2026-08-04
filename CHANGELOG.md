@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-08-04
+
+Migrate Caedral Embeddings Vector Store sub-node to Caedral E1 Small (`caedral-embed-e1-small-v1`) with native 384-dimensional vectors.
+
 ## 1.0.0 — 2026-07-29
 
 First stable release of the official Caedral n8n community node.

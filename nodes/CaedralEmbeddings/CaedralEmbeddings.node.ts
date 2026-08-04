@@ -58,12 +58,27 @@ export class CaedralEmbeddings implements INodeType {
     ],
     properties: [
       {
+        displayName: "Dimensions",
+        name: "dimensions",
+        type: "options",
+        options: [{ name: "384", value: 384 }],
+        default: 384,
+        required: true,
+        description: "Native embedding dimension of Caedral E1 Small.",
+      },
+      {
         displayName: "Model",
         name: "model",
-        type: "string",
-        default: "caedral-embed",
-        description:
-          "Embedding model (caedral-embed — $0.028/1M tokens). 1536-dimension vectors.",
+        type: "options",
+        options: [
+          {
+            name: "Caedral E1 Small",
+            value: "caedral-embed-e1-small-v1",
+          },
+        ],
+        default: "caedral-embed-e1-small-v1",
+        required: true,
+        description: "Caedral E1 Small embedding model (384 native dimensions).",
       },
       {
         displayName: "Batch Size",
@@ -87,6 +102,7 @@ export class CaedralEmbeddings implements INodeType {
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
     const apiKey = credentials.apiKey;
     const model = this.getNodeParameter("model", itemIndex) as string;
+    const dimensions = this.getNodeParameter("dimensions", itemIndex) as number;
     const batchSize = this.getNodeParameter("batchSize", itemIndex) as number;
     const helpers = this.helpers;
 
@@ -102,7 +118,7 @@ export class CaedralEmbeddings implements INodeType {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: { model, input },
+        body: { model, dimensions, input },
         json: true,
       })) as EmbeddingResponse;
 

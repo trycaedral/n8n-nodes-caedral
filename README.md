@@ -73,6 +73,9 @@ Language model sub-node for n8n **AI Agent** and **Chain** nodes. Connect its **
 Embedding model sub-node for n8n **Vector Store** nodes. Provides `embedDocuments` and `embedQuery` via `POST /v1/embeddings`.
 
 - Default model: `caedral-embed-e1-small-v1` (Caedral E1 Small, 384 dimensions)
+- Legacy prepaid alias: `caedral-embed` (resolves to E1 Small on Caedral infrastructure)
+- `input_type`: `embedQuery` sends `query`, `embedDocuments` sends `document` (E5-style prefixing)
+- `encoding_format`: `float` (default) or `base64` (decoded to float vectors for Vector Store nodes)
 - Configurable batch size (default 512)
 
 ### Caedral Reranker (Vector Store sub-node)

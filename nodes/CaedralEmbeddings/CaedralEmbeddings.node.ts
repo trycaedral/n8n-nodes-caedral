@@ -13,11 +13,39 @@ type CaedralCredentials = {
   baseUrl?: string;
 };
 
+type EmbeddingItem = {
+  embedding: number[] | string;
+  index: number;
+};
+
 type EmbeddingResponse = {
-  data: Array<{ embedding: number[]; index: number }>;
+  data: EmbeddingItem[];
   model: string;
   usage?: { prompt_tokens: number; total_tokens: number };
 };
+
+type InputType = "query" | "document";
+type EncodingFormat = "float" | "base64";
+
+function decodeBase64Embedding(encoded: string, dimensions: number): number[] {
+  const raw = Buffer.from(encoded, "base64");
+  const floats: number[] = [];
+  for (let i = 0; i < dimensions; i++) {
+    floats.push(raw.readFloatLE(i * 4));
+  }
+  return floats;
+}
+
+function normalizeEmbedding(
+  value: number[] | string,
+  encodingFormat: EncodingFormat,
+  dimensions: number,
+): number[] {
+  if (encodingFormat === "base64" && typeof value === "string") {
+    return decodeBase64Embedding(value, dimensions);
+  }
+  return value as number[];
+}
 
 /**
  * Caedral Embeddings — an AI Embedding sub-node compatible with
@@ -75,10 +103,39 @@ export class CaedralEmbeddings implements INodeType {
             name: "Caedral E1 Small",
             value: "caedral-embed-e1-small-v1",
           },
+          {
+            name: "Caedral Embed (legacy alias)",
+            value: "caedral-embed",
+          },
         ],
         default: "caedral-embed-e1-small-v1",
         required: true,
-        description: "Caedral E1 Small embedding model (384 native dimensions).",
+        description:
+          "Caedral E1 Small embedding model (384 native dimensions). Use caedral-embed for legacy prepaid API compatibility.",
+      },
+      {
+        displayName: "Input Type",
+        name: "inputType",
+        type: "options",
+        options: [
+          { name: "Query", value: "query" },
+          { name: "Document", value: "document" },
+        ],
+        default: "query",
+        description:
+          "Default input type for retrieval-aware prefixing. embedQuery always sends query; embedDocuments always sends document.",
+      },
+      {
+        displayName: "Encoding Format",
+        name: "encodingFormat",
+        type: "options",
+        options: [
+          { name: "Float", value: "float" },
+          { name: "Base64", value: "base64" },
+        ],
+        default: "float",
+        description:
+          "Response encoding from the embeddings API. Base64 is decoded to float vectors for Vector Store compatibility.",
       },
       {
         displayName: "Batch Size",
@@ -103,11 +160,16 @@ export class CaedralEmbeddings implements INodeType {
     const apiKey = credentials.apiKey;
     const model = this.getNodeParameter("model", itemIndex) as string;
     const dimensions = this.getNodeParameter("dimensions", itemIndex) as number;
+    const encodingFormat = this.getNodeParameter(
+      "encodingFormat",
+      itemIndex,
+    ) as EncodingFormat;
     const batchSize = this.getNodeParameter("batchSize", itemIndex) as number;
     const helpers = this.helpers;
 
     async function callEmbeddings(
       input: string | string[],
+      inputType: InputType,
     ): Promise<number[][]> {
       const url = buildRequestUrl(baseUrl, "/v1/embeddings");
       const response = (await helpers.httpRequest({
@@ -118,13 +180,21 @@ export class CaedralEmbeddings implements INodeType {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: { model, dimensions, input },
+        body: {
+          model,
+          dimensions,
+          input,
+          input_type: inputType,
+          encoding_format: encodingFormat,
+        },
         json: true,
       })) as EmbeddingResponse;
 
       return response.data
         .sort((a, b) => a.index - b.index)
-        .map((item) => item.embedding);
+        .map((item) =>
+          normalizeEmbedding(item.embedding, encodingFormat, dimensions),
+        );
     }
 
     const embeddings = {
@@ -136,14 +206,14 @@ export class CaedralEmbeddings implements INodeType {
         const results: number[][] = [];
         for (let i = 0; i < documents.length; i += batchSize) {
           const batch = documents.slice(i, i + batchSize);
-          const batchResults = await callEmbeddings(batch);
+          const batchResults = await callEmbeddings(batch, "document");
           results.push(...batchResults);
         }
         return results;
       },
 
       async embedQuery(query: string): Promise<number[]> {
-        const results = await callEmbeddings(query);
+        const results = await callEmbeddings(query, "query");
         return results[0] ?? [];
       },
     };

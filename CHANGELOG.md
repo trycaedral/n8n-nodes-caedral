@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-08-04
+
+OpenRouter provider readiness for the Caedral Embeddings Vector Store sub-node.
+
+- Add legacy prepaid model alias `caedral-embed` alongside `caedral-embed-e1-small-v1`
+- Send `input_type` (`query` for `embedQuery`, `document` for `embedDocuments`) for retrieval-aware prefixing
+- Add `encoding_format` option (`float` | `base64`); base64 responses are decoded for Vector Store compatibility
+
 ## 1.1.0 — 2026-08-04
 
 Migrate Caedral Embeddings Vector Store sub-node to Caedral E1 Small (`caedral-embed-e1-small-v1`) with native 384-dimensional vectors.

@@ -29,6 +29,12 @@ type EncodingFormat = "float" | "base64";
 
 function decodeBase64Embedding(encoded: string, dimensions: number): number[] {
   const raw = Buffer.from(encoded, "base64");
+  const expectedBytes = dimensions * 4;
+  if (raw.length !== expectedBytes) {
+    throw new Error(
+      `Base64 embedding payload length ${raw.length} does not match ${dimensions} dimensions (${expectedBytes} bytes expected)`,
+    );
+  }
   const floats: number[] = [];
   for (let i = 0; i < dimensions; i++) {
     floats.push(raw.readFloatLE(i * 4));
@@ -112,18 +118,6 @@ export class CaedralEmbeddings implements INodeType {
         required: true,
         description:
           "Caedral E1 Small embedding model (384 native dimensions). Use caedral-embed for legacy prepaid API compatibility.",
-      },
-      {
-        displayName: "Input Type",
-        name: "inputType",
-        type: "options",
-        options: [
-          { name: "Query", value: "query" },
-          { name: "Document", value: "document" },
-        ],
-        default: "query",
-        description:
-          "Default input type for retrieval-aware prefixing. embedQuery always sends query; embedDocuments always sends document.",
       },
       {
         displayName: "Encoding Format",

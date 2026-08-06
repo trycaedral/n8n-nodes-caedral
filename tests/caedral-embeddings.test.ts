@@ -24,15 +24,14 @@ describe("CaedralEmbeddings node", () => {
     expect(dimProp?.default).toBe(384);
   });
 
-  it("exposes input_type and encoding_format options for OpenRouter readiness", () => {
+  it("routes input_type by embed method without exposing a dead UI control", () => {
     const node = new CaedralEmbeddings();
-    const inputTypeProp = node.description.properties.find(
-      (p) => p.name === "inputType",
-    );
+    expect(
+      node.description.properties.find((p) => p.name === "inputType"),
+    ).toBeUndefined();
     const encodingProp = node.description.properties.find(
       (p) => p.name === "encodingFormat",
     );
-    expect(findOptionValues(inputTypeProp)).toEqual(["query", "document"]);
     expect(findOptionValues(encodingProp)).toEqual(["float", "base64"]);
     expect(encodingProp?.default).toBe("float");
   });
@@ -140,5 +139,47 @@ describe("CaedralEmbeddings node", () => {
     expect(result[0]).toBeCloseTo(0.25, 5);
     expect(result[1]).toBeCloseTo(-0.5, 5);
     expect(result[2]).toBeCloseTo(0.75, 5);
+  });
+
+  it("rejects base64 payloads whose byte length does not match dimensions", async () => {
+    const node = new CaedralEmbeddings();
+    const packed = Buffer.alloc(8);
+    packed.writeFloatLE(0.1, 0);
+    packed.writeFloatLE(0.2, 4);
+    const encoded = packed.toString("base64");
+
+    const mockContext = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: "cd_live_test",
+        baseUrl: "https://api.caedral.com",
+      }),
+      getNodeParameter: vi.fn((name: string) => {
+        const values: Record<string, unknown> = {
+          model: "caedral-embed-e1-small-v1",
+          dimensions: 3,
+          encodingFormat: "base64",
+          batchSize: 512,
+        };
+        return values[name];
+      }),
+      helpers: {
+        httpRequest: vi.fn(async () => ({
+          model: "caedral-embed-e1-small-v1",
+          data: [{ index: 0, embedding: encoded }],
+        })),
+      },
+    };
+
+    const { response } = await node.supplyData.call(
+      mockContext as never,
+      0,
+    );
+    const embeddings = response as {
+      embedQuery: (q: string) => Promise<number[]>;
+    };
+
+    await expect(embeddings.embedQuery("test")).rejects.toThrow(
+      /does not match 3 dimensions/,
+    );
   });
 });

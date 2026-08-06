@@ -417,8 +417,10 @@ export class Caedral implements INodeType {
           }
 
           const body: Record<string, unknown> = {
-            model: "caedral-embed",
+            model: "caedral-embed-e1-small-v1",
+            dimensions: 384,
             input,
+            input_type: "document",
           };
 
           const response = await caedralRequest<IDataObject>(

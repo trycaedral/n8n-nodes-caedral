@@ -28,6 +28,7 @@ export class CaedralChatModel implements INodeType {
       dark: "file:../../icons/caedral.dark.svg",
     },
     group: ["transform"],
+    subtitle: '={{$parameter["model"]}}',
     version: 1,
     description: "Use Caedral chat tiers with AI Agent and Chain nodes (prepaid API balance)",
     defaults: {

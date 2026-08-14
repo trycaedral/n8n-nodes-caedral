@@ -6,6 +6,8 @@ import {
 
 export { DEFAULT_BASE_URL, CHAT_TIER_PRICING, SPECIALIZED_PRICING };
 
+import { INode, NodeOperationError } from "n8n-workflow";
+
 export const MODEL_OPTIONS = [
   {
     name: "Base (Free)",
@@ -104,22 +106,28 @@ export function normalizeBaseUrl(baseUrl?: string): string {
  * field or the raw `messagesJson`, and includes `temperature` and
  * `max_tokens` only when they are explicitly provided.
  *
+ * @param node - The n8n node instance, used to attach context to
+ *   any validation errors.
  * @param params - Node parameters collected for the chat completion
  *   operation.
  * @returns A fully-formed request body ready to send to the API.
- * @throws {Error} If message resolution fails (missing text in
- *   Simple mode, or invalid JSON in JSON mode).
+ * @throws {NodeOperationError} If message resolution fails (missing
+ *   text in Simple mode, or invalid JSON in JSON mode).
  */
-export function buildChatCompletionBody(params: {
-  model: string;
-  messageMode: "simple" | "json";
-  message?: string;
-  messagesJson?: string | ChatMessage[];
-  temperature?: number;
-  maxTokens?: number;
-  systemPrompt?: string;
-}): ChatCompletionRequestBody {
+export function buildChatCompletionBody(
+  node: INode,
+  params: {
+    model: string;
+    messageMode: "simple" | "json";
+    message?: string;
+    messagesJson?: string | ChatMessage[];
+    temperature?: number;
+    maxTokens?: number;
+    systemPrompt?: string;
+  },
+): ChatCompletionRequestBody {
   const messages = resolveMessages(
+    node,
     params.messageMode,
     params.message,
     params.messagesJson,
@@ -152,14 +160,18 @@ export function buildChatCompletionBody(params: {
  * trimmed `message` string. In `"json"` mode the `messagesJson`
  * input is parsed and validated via {@link parseMessagesJson}.
  *
+ * @param node - The n8n node instance, used to attach context to
+ *   any validation errors.
  * @param messageMode - Which input path to use.
  * @param message - Raw text for Simple mode.
  * @param messagesJson - Raw JSON (string or already-parsed array)
  *   for JSON mode.
  * @returns The validated list of chat messages.
- * @throws {Error} If required input is missing or invalid.
+ * @throws {NodeOperationError} If required input is missing or
+ *   invalid.
  */
 export function resolveMessages(
+  node: INode,
   messageMode: "simple" | "json",
   message?: string,
   messagesJson?: string | ChatMessage[],
@@ -167,14 +179,14 @@ export function resolveMessages(
   if (messageMode === "simple") {
     const text = message?.trim();
     if (!text) {
-      throw new Error("Message is required in Simple mode.");
+      throw new NodeOperationError(node, "Message is required in Simple mode.");
     }
     return [{ role: "user", content: text }];
   }
 
-  const parsed = parseMessagesJson(messagesJson);
+  const parsed = parseMessagesJson(node, messagesJson);
   if (parsed.length === 0) {
-    throw new Error("Messages JSON must contain at least one message.");
+    throw new NodeOperationError(node, "Messages JSON must contain at least one message.");
   }
   return parsed;
 }
@@ -187,16 +199,19 @@ export function resolveMessages(
  * (`"system" | "user" | "assistant" | "tool"`) and a string
  * `content`.
  *
+ * @param node - The n8n node instance, used to attach context to
+ *   any validation errors.
  * @param raw - The raw input value provided by the user.
  * @returns The list of validated chat messages.
- * @throws {Error} If the value is missing, is not valid JSON, is
- *   not an array, or contains an invalid entry.
+ * @throws {NodeOperationError} If the value is missing, is not
+ *   valid JSON, is not an array, or contains an invalid entry.
  */
 export function parseMessagesJson(
+  node: INode,
   raw: string | ChatMessage[] | undefined,
 ): ChatMessage[] {
   if (raw === undefined || raw === null || raw === "") {
-    throw new Error("Messages JSON is required in JSON mode.");
+    throw new NodeOperationError(node, "Messages JSON is required in JSON mode.");
   }
 
   let value: unknown = raw;
@@ -204,33 +219,34 @@ export function parseMessagesJson(
     try {
       value = JSON.parse(raw);
     } catch {
-      throw new Error("Messages JSON must be valid JSON.");
+      throw new NodeOperationError(node, "Messages JSON must be valid JSON.");
     }
   }
 
   if (!Array.isArray(value)) {
-    throw new Error("Messages JSON must be an array of message objects.");
+    throw new NodeOperationError(node, "Messages JSON must be an array of message objects.");
   }
 
   const messages: ChatMessage[] = [];
   for (const [index, item] of value.entries()) {
     if (typeof item !== "object" || item === null) {
-      throw new Error(`Message at index ${index} must be an object.`);
+      throw new NodeOperationError(node, `Message at index ${index} must be an object.`);
     }
 
     const role = (item as { role?: unknown }).role;
     const content = (item as { content?: unknown }).content;
 
     if (typeof role !== "string" || !role.trim()) {
-      throw new Error(`Message at index ${index} requires a role.`);
+      throw new NodeOperationError(node, `Message at index ${index} requires a role.`);
     }
 
     if (typeof content !== "string") {
-      throw new Error(`Message at index ${index} requires string content.`);
+      throw new NodeOperationError(node, `Message at index ${index} requires string content.`);
     }
 
     if (!["system", "user", "assistant", "tool"].includes(role)) {
-      throw new Error(
+      throw new NodeOperationError(
+        node,
         `Message at index ${index} has invalid role "${role}".`,
       );
     }

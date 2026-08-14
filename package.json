@@ -52,11 +52,11 @@
       "dist/nodes/Caedral/Caedral.node.js",
       "dist/nodes/CaedralChatModel/CaedralChatModel.node.js",
       "dist/nodes/CaedralEmbeddings/CaedralEmbeddings.node.js",
-      "dist/nodes/CaedralReranker/CaedralReranker.node.js",
       "dist/nodes/CaedralTrigger/CaedralTrigger.node.js"
     ]
   },
   "devDependencies": {
+    "@n8n/node-cli": "^0.43.3",
     "@types/node": "^20",
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",

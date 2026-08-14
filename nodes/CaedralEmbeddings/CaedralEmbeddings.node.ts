@@ -1,12 +1,12 @@
-import type {
+import {
   INodeType,
   INodeTypeDescription,
   ISupplyDataFunctions,
   SupplyData,
+  UserError, NodeConnectionTypes 
 } from "n8n-workflow";
-import { NodeConnectionTypes } from "n8n-workflow";
 
-import { normalizeBaseUrl, buildRequestUrl } from "../Caedral/helpers";
+import { normalizeBaseUrl, buildRequestUrl} from "../Caedral/helpers";
 
 type CaedralCredentials = {
   apiKey: string;
@@ -28,10 +28,10 @@ type InputType = "query" | "document";
 type EncodingFormat = "float" | "base64";
 
 function decodeBase64Embedding(encoded: string, dimensions: number): number[] {
-  const raw = Buffer.from(encoded, "base64");
+   const raw = Buffer.from(encoded, "base64");
   const expectedBytes = dimensions * 4;
   if (raw.length !== expectedBytes) {
-    throw new Error(
+    throw new UserError(
       `Base64 embedding payload length ${raw.length} does not match ${dimensions} dimensions (${expectedBytes} bytes expected)`,
     );
   }
@@ -67,6 +67,7 @@ export class CaedralEmbeddings implements INodeType {
       dark: "file:../../icons/caedral.dark.svg",
     },
     group: ["transform"],
+    subtitle: '={{$parameter["model"]}}',
     version: 1,
     description:
       "Generate text embeddings via Caedral for use with Vector Store nodes",
@@ -98,7 +99,7 @@ export class CaedralEmbeddings implements INodeType {
         options: [{ name: "384", value: 384 }],
         default: 384,
         required: true,
-        description: "Native embedding dimension of Caedral E1 Small.",
+        description: 'Native embedding dimension of Caedral E1 Small',
       },
       {
         displayName: "Model",
@@ -110,7 +111,7 @@ export class CaedralEmbeddings implements INodeType {
             value: "caedral-embed-e1-small-v1",
           },
           {
-            name: "Caedral Embed (legacy alias)",
+            name: 'Caedral Embed (Legacy Alias)',
             value: "caedral-embed",
           },
         ],

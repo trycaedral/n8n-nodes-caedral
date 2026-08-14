@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { INode } from "n8n-workflow";
 
 import {
   buildChatCompletionBody,
@@ -10,6 +11,20 @@ import {
   parseMessagesJson,
   resolveMessages,
 } from "../helpers";
+
+/**
+ * Minimal INode stand-in for tests. Only the fields NodeOperationError
+ * and friends actually read are required — the rest is filler so the
+ * shape satisfies the INode type.
+ */
+const fakeNode: INode = {
+  id: "test-node",
+  name: "Caedral",
+  type: "caedral",
+  typeVersion: 2,
+  position: [0, 0],
+  parameters: {},
+};
 
 describe("normalizeBaseUrl", () => {
   it("defaults to production API URL", () => {
@@ -33,19 +48,19 @@ describe("buildRequestUrl", () => {
 
 describe("resolveMessages", () => {
   it("builds a single user message in simple mode", () => {
-    expect(resolveMessages("simple", "Hello Caedral")).toEqual([
+    expect(resolveMessages(fakeNode, "simple", "Hello Caedral")).toEqual([
       { role: "user", content: "Hello Caedral" },
     ]);
   });
 
   it("throws when simple message is empty", () => {
-    expect(() => resolveMessages("simple", "   ")).toThrow(
+    expect(() => resolveMessages(fakeNode, "simple", "   ")).toThrow(
       "Message is required",
     );
   });
 
   it("parses JSON message arrays", () => {
-    const messages = resolveMessages("json", undefined, [
+    const messages = resolveMessages(fakeNode, "json", undefined, [
       { role: "system", content: "You are helpful." },
       { role: "user", content: "Hi" },
     ]);
@@ -58,18 +73,21 @@ describe("resolveMessages", () => {
 describe("parseMessagesJson", () => {
   it("parses JSON strings", () => {
     const messages = parseMessagesJson(
+      fakeNode,
       '[{"role":"user","content":"Test"}]',
     );
     expect(messages).toEqual([{ role: "user", content: "Test" }]);
   });
 
   it("rejects invalid JSON", () => {
-    expect(() => parseMessagesJson("{not json}")).toThrow("valid JSON");
+    expect(() => parseMessagesJson(fakeNode, "{not json}")).toThrow(
+      "valid JSON",
+    );
   });
 
   it("rejects invalid roles", () => {
     expect(() =>
-      parseMessagesJson('[{"role":"invalid","content":"x"}]'),
+      parseMessagesJson(fakeNode, '[{"role":"invalid","content":"x"}]'),
     ).toThrow("invalid role");
   });
 });
@@ -77,7 +95,7 @@ describe("parseMessagesJson", () => {
 describe("buildChatCompletionBody", () => {
   it("builds a minimal request body", () => {
     expect(
-      buildChatCompletionBody({
+      buildChatCompletionBody(fakeNode, {
         model: "caedral-titan",
         messageMode: "simple",
         message: "Hello",
@@ -90,7 +108,7 @@ describe("buildChatCompletionBody", () => {
 
   it("includes optional parameters when provided", () => {
     expect(
-      buildChatCompletionBody({
+      buildChatCompletionBody(fakeNode, {
         model: "caedral-base",
         messageMode: "simple",
         message: "Hello",
@@ -106,7 +124,7 @@ describe("buildChatCompletionBody", () => {
   });
 
   it("prepends system prompt in simple mode", () => {
-    const result = buildChatCompletionBody({
+    const result = buildChatCompletionBody(fakeNode, {
       model: "caedral-base",
       messageMode: "simple",
       message: "Hello",
@@ -119,7 +137,7 @@ describe("buildChatCompletionBody", () => {
   });
 
   it("does not add system prompt in json mode", () => {
-    const result = buildChatCompletionBody({
+    const result = buildChatCompletionBody(fakeNode, {
       model: "caedral-base",
       messageMode: "json",
       messagesJson: [{ role: "user", content: "Hi" }],

@@ -36,7 +36,7 @@ export class Caedral implements INodeType {
     },
     group: ["transform"],
     version: 2,
-    subtitle: '={{$parameter["operation"]}}',
+    subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description:
       "Call Caedral AI — chat (Base/Titan/Olympus/Primordial), vision, embed, voice, rerank, and account APIs. API usage bills from prepaid balance.",
     defaults: {
@@ -52,11 +52,28 @@ export class Caedral implements INodeType {
       },
     ],
     properties: [
+      // --- Resource selector ---
+      {
+        displayName: "Resource",
+        name: "resource",
+        type: "options",
+        noDataExpression: true,
+        options: [
+          { name: "Account", value: "account" },
+          { name: "AI", value: "ai" },
+          { name: "Audio", value: "audio" },
+          { name: "Image", value: "image" },
+        ],
+        default: "ai",
+      },
+
+      // --- Operation dropdowns, one per resource ---
       {
         displayName: "Operation",
         name: "operation",
         type: "options",
         noDataExpression: true,
+        displayOptions: { show: { resource: ["ai"] } },
         options: [
           {
             name: "Chat Completion",
@@ -69,30 +86,6 @@ export class Caedral implements INodeType {
             value: "createEmbedding",
             description: "Create vector embeddings for text",
             action: "Create an embedding",
-          },
-          {
-            name: "Generate Audio",
-            value: "audioGeneration",
-            description: "Generate speech audio from text",
-            action: "Generate audio",
-          },
-          {
-            name: "Generate Image",
-            value: "imageGeneration",
-            description: "Generate an image from a text prompt",
-            action: "Generate an image",
-          },
-          {
-            name: "Get Account Info",
-            value: "getAccountInfo",
-            description: "Get prepaid balance and account status",
-            action: "Get account info",
-          },
-          {
-            name: "Get Usage",
-            value: "getUsage",
-            description: "Get prepaid balance and account status",
-            action: "Get usage",
           },
           {
             name: "List Models",
@@ -109,13 +102,67 @@ export class Caedral implements INodeType {
         ],
         default: "chatCompletion",
       },
+      {
+        displayName: "Operation",
+        name: "operation",
+        type: "options",
+        noDataExpression: true,
+        displayOptions: { show: { resource: ["audio"] } },
+        options: [
+          {
+            name: "Generate Audio",
+            value: "audioGeneration",
+            description: "Generate speech audio from text",
+            action: "Generate audio",
+          },
+        ],
+        default: "audioGeneration",
+      },
+      {
+        displayName: "Operation",
+        name: "operation",
+        type: "options",
+        noDataExpression: true,
+        displayOptions: { show: { resource: ["image"] } },
+        options: [
+          {
+            name: "Generate Image",
+            value: "imageGeneration",
+            description: "Generate an image from a text prompt",
+            action: "Generate an image",
+          },
+        ],
+        default: "imageGeneration",
+      },
+      {
+        displayName: "Operation",
+        name: "operation",
+        type: "options",
+        noDataExpression: true,
+        displayOptions: { show: { resource: ["account"] } },
+        options: [
+          {
+            name: "Get Account Info",
+            value: "getAccountInfo",
+            description: "Get prepaid balance and account status",
+            action: "Get account info",
+          },
+          {
+            name: "Get Usage",
+            value: "getUsage",
+            description: "Get prepaid balance and account status",
+            action: "Get usage",
+          },
+        ],
+        default: "getAccountInfo",
+      },
 
       // --- Chat Completion params ---
       {
         displayName: "Model",
         name: "model",
         type: "options",
-        displayOptions: { show: { operation: ["chatCompletion"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
         options: [...MODEL_OPTIONS],
         default: "caedral-base",
         description: "The Caedral model tier to use",
@@ -124,7 +171,7 @@ export class Caedral implements INodeType {
         displayName: "Message Input Mode",
         name: "messageMode",
         type: "options",
-        displayOptions: { show: { operation: ["chatCompletion"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
         options: [
           { name: "Simple", value: "simple", description: "Single user message text" },
           { name: "JSON", value: "json", description: "Full messages array as JSON" },
@@ -136,7 +183,9 @@ export class Caedral implements INodeType {
         name: "message",
         type: "string",
         typeOptions: { rows: 4 },
-        displayOptions: { show: { operation: ["chatCompletion"], messageMode: ["simple"] } },
+        displayOptions: {
+          show: { resource: ["ai"], operation: ["chatCompletion"], messageMode: ["simple"] },
+        },
         default: "",
         placeholder: "Explain quantum computing in one sentence.",
         description: "The user message sent to the model",
@@ -145,7 +194,9 @@ export class Caedral implements INodeType {
         displayName: "Messages JSON",
         name: "messagesJson",
         type: "json",
-        displayOptions: { show: { operation: ["chatCompletion"], messageMode: ["json"] } },
+        displayOptions: {
+          show: { resource: ["ai"], operation: ["chatCompletion"], messageMode: ["json"] },
+        },
         default: '[{"role":"user","content":"Hello!"}]',
         description:
           'Array of message objects, e.g. [{"role":"user","content":"Hello"}]',
@@ -155,7 +206,7 @@ export class Caedral implements INodeType {
         name: "temperature",
         type: "number",
         typeOptions: { minValue: 0, maxValue: 2, numberStepSize: 0.1 },
-        displayOptions: { show: { operation: ["chatCompletion"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
         default: 1,
         description: "Sampling temperature (0–2). Leave default to omit from request.",
       },
@@ -164,7 +215,7 @@ export class Caedral implements INodeType {
         name: "maxTokens",
         type: "number",
         typeOptions: { minValue: 1 },
-        displayOptions: { show: { operation: ["chatCompletion"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
         default: 0,
         description: "Maximum tokens to generate. Set to 0 to omit from request.",
       },
@@ -173,7 +224,9 @@ export class Caedral implements INodeType {
         name: "systemPrompt",
         type: "string",
         typeOptions: { rows: 3 },
-        displayOptions: { show: { operation: ["chatCompletion"], messageMode: ["simple"] } },
+        displayOptions: {
+          show: { resource: ["ai"], operation: ["chatCompletion"], messageMode: ["simple"] },
+        },
         default: "",
         description: "Optional system message prepended before the user message",
       },
@@ -184,7 +237,7 @@ export class Caedral implements INodeType {
         name: "imagePrompt",
         type: "string",
         typeOptions: { rows: 4 },
-        displayOptions: { show: { operation: ["imageGeneration"] } },
+        displayOptions: { show: { resource: ["image"], operation: ["imageGeneration"] } },
         default: "",
         required: true,
         placeholder: "A futuristic city skyline at sunset, digital art",
@@ -194,7 +247,7 @@ export class Caedral implements INodeType {
         displayName: "Size",
         name: "imageSize",
         type: "options",
-        displayOptions: { show: { operation: ["imageGeneration"] } },
+        displayOptions: { show: { resource: ["image"], operation: ["imageGeneration"] } },
         options: [
           { name: "1024x1024", value: "1024x1024" },
           { name: "1792x1024", value: "1792x1024" },
@@ -208,7 +261,7 @@ export class Caedral implements INodeType {
         name: "imageN",
         type: "number",
         typeOptions: { minValue: 1, maxValue: 4 },
-        displayOptions: { show: { operation: ["imageGeneration"] } },
+        displayOptions: { show: { resource: ["image"], operation: ["imageGeneration"] } },
         default: 1,
         description: "Number of images to generate (1–4)",
       },
@@ -219,7 +272,7 @@ export class Caedral implements INodeType {
         name: "embeddingInput",
         type: "string",
         typeOptions: { rows: 4 },
-        displayOptions: { show: { operation: ["createEmbedding"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["createEmbedding"] } },
         default: "",
         required: true,
         placeholder: "The quick brown fox jumps over the lazy dog.",
@@ -232,7 +285,7 @@ export class Caedral implements INodeType {
         name: "audioInput",
         type: "string",
         typeOptions: { rows: 4 },
-        displayOptions: { show: { operation: ["audioGeneration"] } },
+        displayOptions: { show: { resource: ["audio"], operation: ["audioGeneration"] } },
         default: "",
         required: true,
         placeholder: "Welcome to Caedral, the unified AI platform.",
@@ -242,7 +295,7 @@ export class Caedral implements INodeType {
         displayName: "Voice",
         name: "audioVoice",
         type: "options",
-        displayOptions: { show: { operation: ["audioGeneration"] } },
+        displayOptions: { show: { resource: ["audio"], operation: ["audioGeneration"] } },
         options: [
           { name: "Alloy", value: "alloy" },
           { name: "Echo", value: "echo" },
@@ -260,7 +313,7 @@ export class Caedral implements INodeType {
         displayName: "Model",
         name: "rerankModel",
         type: "string",
-        displayOptions: { show: { operation: ["rerank"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
         default: "caedral-rerank",
         description: "Reranking model to use",
       },
@@ -269,7 +322,7 @@ export class Caedral implements INodeType {
         name: "rerankQuery",
         type: "string",
         typeOptions: { rows: 2 },
-        displayOptions: { show: { operation: ["rerank"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
         default: "",
         required: true,
         placeholder: "What is the capital of France?",
@@ -279,7 +332,7 @@ export class Caedral implements INodeType {
         displayName: "Documents",
         name: "rerankDocuments",
         type: "json",
-        displayOptions: { show: { operation: ["rerank"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
         default: '["Paris is the capital of France.", "Berlin is in Germany."]',
         required: true,
         description: "JSON array of document strings to rerank",
@@ -289,7 +342,7 @@ export class Caedral implements INodeType {
         name: "rerankTopN",
         type: "number",
         typeOptions: { minValue: 1 },
-        displayOptions: { show: { operation: ["rerank"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
         default: 5,
         description: "Maximum number of documents to return after reranking",
       },
@@ -302,7 +355,7 @@ export class Caedral implements INodeType {
           maxValue: 1,
           numberStepSize: 0.05,
         },
-        displayOptions: { show: { operation: ["rerank"] } },
+        displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
         default: 0,
         description: 'Only return documents with a relevance score above this threshold. 0 = no filtering.',
       },
@@ -346,9 +399,6 @@ export class Caedral implements INodeType {
           const messageMode = this.getNodeParameter("messageMode", itemIndex, "simple") as
             | "simple"
             | "json";
-          // "message"/"systemPrompt" only exist in simple mode and "messagesJson"
-          // only in json mode (displayOptions); reading a hidden parameter without
-          // a fallback makes getNodeParameter throw "Could not get parameter".
           const message =
             messageMode === "simple"
               ? (this.getNodeParameter("message", itemIndex, "") as string)

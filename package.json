@@ -52,7 +52,6 @@
       "dist/nodes/Caedral/Caedral.node.js",
       "dist/nodes/CaedralChatModel/CaedralChatModel.node.js",
       "dist/nodes/CaedralEmbeddings/CaedralEmbeddings.node.js",
-      "dist/nodes/CaedralReranker/CaedralReranker.node.js",
       "dist/nodes/CaedralTrigger/CaedralTrigger.node.js"
     ]
   },

@@ -65,12 +65,6 @@ export class Caedral implements INodeType {
             action: "Send a chat completion",
           },
           {
-            name: "Generate Image",
-            value: "imageGeneration",
-            description: "Generate an image from a text prompt",
-            action: "Generate an image",
-          },
-          {
             name: "Create Embedding",
             value: "createEmbedding",
             description: "Create vector embeddings for text",
@@ -83,16 +77,16 @@ export class Caedral implements INodeType {
             action: "Generate audio",
           },
           {
-            name: "Rerank",
-            value: "rerank",
-            description: "Rerank documents by relevance to a query",
-            action: "Rerank documents",
+            name: "Generate Image",
+            value: "imageGeneration",
+            description: "Generate an image from a text prompt",
+            action: "Generate an image",
           },
           {
-            name: "List Models",
-            value: "listModels",
-            description: "List all available Caedral models",
-            action: "List models",
+            name: "Get Account Info",
+            value: "getAccountInfo",
+            description: "Get prepaid balance and account status",
+            action: "Get account info",
           },
           {
             name: "Get Usage",
@@ -101,10 +95,16 @@ export class Caedral implements INodeType {
             action: "Get usage",
           },
           {
-            name: "Get Account Info",
-            value: "getAccountInfo",
-            description: "Get prepaid balance and account status",
-            action: "Get account info",
+            name: "List Models",
+            value: "listModels",
+            description: "List all available Caedral models",
+            action: "List models",
+          },
+          {
+            name: "Rerank",
+            value: "rerank",
+            description: "Rerank documents by relevance to a query",
+            action: "Rerank documents",
           },
         ],
         default: "chatCompletion",
@@ -247,8 +247,8 @@ export class Caedral implements INodeType {
           { name: "Alloy", value: "alloy" },
           { name: "Echo", value: "echo" },
           { name: "Fable", value: "fable" },
-          { name: "Onyx", value: "onyx" },
           { name: "Nova", value: "nova" },
+          { name: "Onyx", value: "onyx" },
           { name: "Shimmer", value: "shimmer" },
         ],
         default: "alloy",
@@ -256,6 +256,14 @@ export class Caedral implements INodeType {
       },
 
       // --- Rerank params ---
+      {
+        displayName: "Model",
+        name: "rerankModel",
+        type: "string",
+        displayOptions: { show: { operation: ["rerank"] } },
+        default: "caedral-rerank",
+        description: "Reranking model to use",
+      },
       {
         displayName: "Query",
         name: "rerankQuery",
@@ -265,7 +273,7 @@ export class Caedral implements INodeType {
         default: "",
         required: true,
         placeholder: "What is the capital of France?",
-        description: `The search query to rank documents against (caedral-rerank — ${SPECIALIZED_PRICING.rerank})`,
+        description: `The search query to rank documents against (${SPECIALIZED_PRICING.rerank})`,
       },
       {
         displayName: "Documents",
@@ -282,8 +290,21 @@ export class Caedral implements INodeType {
         type: "number",
         typeOptions: { minValue: 1 },
         displayOptions: { show: { operation: ["rerank"] } },
+        default: 5,
+        description: "Maximum number of documents to return after reranking",
+      },
+      {
+        displayName: "Minimum Score",
+        name: "rerankMinScore",
+        type: "number",
+        typeOptions: {
+          minValue: 0,
+          maxValue: 1,
+          numberStepSize: 0.05,
+        },
+        displayOptions: { show: { operation: ["rerank"] } },
         default: 0,
-        description: "Number of top results to return. 0 = return all.",
+        description: "Only return documents with a relevance score above this threshold. 0 = no filtering",
       },
     ],
   };
@@ -460,20 +481,46 @@ export class Caedral implements INodeType {
         }
 
         if (operation === "rerank") {
+          const model = this.getNodeParameter("rerankModel", itemIndex) as string;
           const query = this.getNodeParameter("rerankQuery", itemIndex) as string;
           const docsRaw = this.getNodeParameter("rerankDocuments", itemIndex) as string;
           const topN = this.getNodeParameter("rerankTopN", itemIndex) as number;
+          const minScore = this.getNodeParameter("rerankMinScore", itemIndex) as number;
 
           if (!query.trim()) {
-            throw new NodeOperationError(this.getNode(), "Query is required.", { itemIndex });
+            throw new NodeOperationError(
+              this.getNode(),
+              "Query is required.",
+              { itemIndex },
+            );
           }
 
           let documents: string[];
+
           try {
-            const parsed = typeof docsRaw === "string" ? JSON.parse(docsRaw) : docsRaw;
-            if (!Array.isArray(parsed)) throw new Error("not array");
-            documents = parsed as string[];
-          } catch {
+            const parsed = typeof docsRaw === "string"
+              ? JSON.parse(docsRaw)
+              : docsRaw;
+
+            if (
+              !Array.isArray(parsed) ||
+              !parsed.every(
+                (document): document is string => typeof document === "string",
+              )
+            ) {
+              throw new NodeOperationError(
+                this.getNode(),
+                "Documents must be a valid JSON array of strings.",
+                { itemIndex },
+              );
+            }
+
+            documents = parsed;
+          } catch (error) {
+            if (error instanceof NodeOperationError) {
+              throw error;
+            }
+
             throw new NodeOperationError(
               this.getNode(),
               "Documents must be a valid JSON array of strings.",
@@ -482,22 +529,49 @@ export class Caedral implements INodeType {
           }
 
           if (documents.length === 0) {
-            throw new NodeOperationError(this.getNode(), "At least one document is required.", { itemIndex });
+            throw new NodeOperationError(
+              this.getNode(),
+              "At least one document is required.",
+              { itemIndex },
+            );
           }
 
           const body: Record<string, unknown> = {
-            model: "caedral-rerank",
+            model,
             query: query.trim(),
             documents,
+            top_n: Math.min(topN, documents.length),
           };
-          if (topN > 0) body.top_n = topN;
 
-          const response = await caedralRequest<IDataObject>(
-            this, baseUrl, "POST", "/v1/rerank", body,
+          const response = await caedralRequest<{
+            model: string;
+            results: Array<{
+              index: number;
+              relevance_score: number;
+            }>;
+          }>(
+            this,
+            baseUrl,
+            "POST",
+            "/v1/rerank",
+            body,
           );
 
+          const results = response.results
+            .filter((result) => result.relevance_score >= minScore)
+            .sort((a, b) => b.relevance_score - a.relevance_score)
+            .slice(0, topN);
+
           returnData.push({
-            json: response,
+            json: {
+              model: response.model,
+              results,
+              documents: results.map((result) => ({
+                index: result.index,
+                document: documents[result.index],
+                relevance_score: result.relevance_score,
+              })),
+            } as IDataObject,
             pairedItem: { item: itemIndex },
           });
           continue;

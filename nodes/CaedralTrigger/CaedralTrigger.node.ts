@@ -57,7 +57,7 @@ export class CaedralTrigger implements INodeType {
         default: "balanceBelow",
       },
       {
-        displayName: "Balance Threshold (cents)",
+        displayName: 'Balance Threshold (Cents)',
         name: "balanceThreshold",
         type: "number",
         typeOptions: { minValue: 0 },
@@ -67,6 +67,7 @@ export class CaedralTrigger implements INodeType {
           "Trigger when balance drops below this amount in cents (e.g. 500 = $5.00)",
       },
     ],
+		usableAsTool: true,
   };
 
   async poll(this: IPollFunctions): Promise<INodeExecutionData[][] | null> {

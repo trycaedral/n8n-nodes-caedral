@@ -304,7 +304,7 @@ export class Caedral implements INodeType {
         },
         displayOptions: { show: { operation: ["rerank"] } },
         default: 0,
-        description: "Only return documents with a relevance score above this threshold. 0 = no filtering",
+        description: 'Only return documents with a relevance score above this threshold. 0 = no filtering.',
       },
     ],
   };
@@ -364,7 +364,7 @@ export class Caedral implements INodeType {
               ? (this.getNodeParameter("systemPrompt", itemIndex, "") as string)
               : "";
 
-          const body = buildChatCompletionBody({
+          const body = buildChatCompletionBody(this.getNode(), {
             model,
             messageMode,
             message,
@@ -516,11 +516,7 @@ export class Caedral implements INodeType {
             }
 
             documents = parsed;
-          } catch (error) {
-            if (error instanceof NodeOperationError) {
-              throw error;
-            }
-
+          } catch {
             throw new NodeOperationError(
               this.getNode(),
               "Documents must be a valid JSON array of strings.",
@@ -589,10 +585,6 @@ export class Caedral implements INodeType {
           continue;
         }
 
-        if (error instanceof NodeApiError || error instanceof NodeOperationError) {
-          throw error;
-        }
-
         throw new NodeOperationError(this.getNode(), error as Error, { itemIndex });
       }
     }
@@ -653,7 +645,6 @@ async function caedralRequest<T>(
 
     return responseBody as T;
   } catch (error) {
-    if (error instanceof NodeApiError) throw error;
     throw new NodeApiError(context.getNode(), {
       message: error instanceof Error ? error.message : "Unexpected error calling Caedral API",
     });

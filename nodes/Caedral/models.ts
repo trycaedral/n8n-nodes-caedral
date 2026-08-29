@@ -1,7 +1,7 @@
 import type { ILoadOptionsFunctions, INodePropertyOptions } from "n8n-workflow";
 import { NodeOperationError } from "n8n-workflow";
 
-import { CATALOG_LOAD_ERROR, ENDPOINT_PATHS } from "../../shared/constants";
+import { CATALOG_LOAD_ERROR, CATALOG_TIMEOUT_MS, ENDPOINT_PATHS } from "../../shared/constants";
 import {
   findCatalogModel,
   optionsForEndpoint,
@@ -37,6 +37,7 @@ export async function fetchLiveCatalog(
         url: buildRequestUrl(baseUrl, "/v1/models"),
         json: true,
         ignoreHttpStatusErrors: true,
+        timeout: CATALOG_TIMEOUT_MS,
       },
     );
 

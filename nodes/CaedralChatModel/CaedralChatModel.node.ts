@@ -31,8 +31,8 @@ export class CaedralChatModel implements INodeType {
     displayName: "Caedral Chat Model",
     name: "caedralChatModel",
     icon: {
-      light: "file:../../icons/caedral.svg",
-      dark: "file:../../icons/caedral.dark.svg",
+      light: "file:caedral.svg",
+      dark: "file:caedral.dark.svg",
     },
     group: ["transform"],
     subtitle: '={{$parameter["model"]}}',

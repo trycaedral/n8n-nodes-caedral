@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { CaedralApi } from "../credentials/CaedralApi.credentials";
 import { Caedral } from "../nodes/Caedral/Caedral.node";
 import { CaedralChatModel } from "../nodes/CaedralChatModel/CaedralChatModel.node";
 import { CaedralEmbeddings } from "../nodes/CaedralEmbeddings/CaedralEmbeddings.node";
@@ -82,6 +83,26 @@ describe("n8n reviewer requirements", () => {
     for (const id of OBSOLETE_IDS) {
       expect(defaults).not.toContain(id);
     }
+  });
+
+  it("keeps node and credential icons colocated without parent-path traversal", () => {
+    const nodes = [
+      new Caedral(),
+      new CaedralChatModel(),
+      new CaedralEmbeddings(),
+      new CaedralTrigger(),
+    ];
+    for (const node of nodes) {
+      const icon = node.description.icon as { light?: string; dark?: string };
+      expect(icon.light).toBe("file:caedral.svg");
+      expect(icon.dark).toBe("file:caedral.dark.svg");
+      expect(icon.light).not.toContain("..");
+      expect(icon.dark).not.toContain("..");
+    }
+    const credential = new CaedralApi();
+    expect(credential.icon.light).toBe("file:caedral.svg");
+    expect(credential.icon.dark).toBe("file:caedral.dark.svg");
+    expect(credential.test.request.timeout).toBe(15_000);
   });
 
   it("keeps the trigger from advertising itself as an AI tool", () => {

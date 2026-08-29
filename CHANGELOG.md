@@ -28,6 +28,8 @@ Official n8n integration for the current Caedral production API. Pre-publication
 
 ### Fixed
 
+- Credential test, model dropdowns, and execute fail fast instead of spinning when the API is unreachable; catalog/credential requests use a short timeout
+- Node and credential logos use colocated SVGs so n8n can serve icons and thumbnails (paths with `../` 404 in the editor)
 - n8n review: operations grouped by resource; option lists alphabetized; no raw `Error` from execute/helpers; credentials and subtitles; `(Cents)` copy
 - Usage payload aligned with the current gateway (no subscription plan/pool fields)
 

@@ -5,7 +5,7 @@ import type {
   INodeProperties,
 } from "n8n-workflow";
 
-import { DEFAULT_BASE_URL } from "../shared/constants";
+import { CREDENTIAL_TEST_TIMEOUT_MS, DEFAULT_BASE_URL } from "../shared/constants";
 
 /**
  * n8n credential type for the Caedral API.
@@ -23,8 +23,8 @@ export class CaedralApi implements ICredentialType {
   documentationUrl = "https://caedral.com/docs/n8n-overview";
 
   icon = {
-    light: "file:../../icons/caedral.svg",
-    dark: "file:../../icons/caedral.dark.svg",
+    light: "file:caedral.svg",
+    dark: "file:caedral.dark.svg",
   } as const;
 
   authenticate: IAuthenticateGeneric = {
@@ -63,6 +63,7 @@ export class CaedralApi implements ICredentialType {
       baseURL: "={{$credentials.baseUrl}}",
       url: "/v1/usage",
       method: "GET",
+      timeout: CREDENTIAL_TEST_TIMEOUT_MS,
       headers: {
         Authorization: "=Bearer {{$credentials.apiKey}}",
         Accept: "application/json",

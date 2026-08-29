@@ -143,6 +143,7 @@ describe("dynamic model loading", () => {
       expect.objectContaining({
         method: "GET",
         url: "https://api.caedral.com/v1/models",
+        timeout: 20_000,
       }),
     );
   });

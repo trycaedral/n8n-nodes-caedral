@@ -1,30 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { INode } from "n8n-workflow";
 
 import {
   buildChatCompletionBody,
   buildRequestUrl,
   formatApiErrorMessage,
   formatUsageForOutput,
+  inferResourceFromOperation,
+  isValidChatMessageContent,
   normalizeBaseUrl,
   parseChatCompletionResponse,
+  parseDocumentsJson,
+  parseEmbeddingInput,
   parseMessagesJson,
   resolveMessages,
-} from "../helpers";
-
-/**
- * Minimal INode stand-in for tests. Only the fields NodeOperationError
- * and friends actually read are required — the rest is filler so the
- * shape satisfies the INode type.
- */
-const fakeNode: INode = {
-  id: "test-node",
-  name: "Caedral",
-  type: "caedral",
-  typeVersion: 2,
-  position: [0, 0],
-  parameters: {},
-};
+} from "../nodes/Caedral/helpers";
+import { NodeOperationError } from "n8n-workflow";
 
 describe("normalizeBaseUrl", () => {
   it("defaults to production API URL", () => {
@@ -46,21 +36,33 @@ describe("buildRequestUrl", () => {
   });
 });
 
+describe("inferResourceFromOperation", () => {
+  it("maps v1 operations to v2 resources", () => {
+    expect(inferResourceFromOperation("chatCompletion")).toBe("ai");
+    expect(inferResourceFromOperation("createEmbedding")).toBe("ai");
+    expect(inferResourceFromOperation("rerank")).toBe("ai");
+    expect(inferResourceFromOperation("audioGeneration")).toBe("audio");
+    expect(inferResourceFromOperation("imageGeneration")).toBe("image");
+    expect(inferResourceFromOperation("listModels")).toBe("models");
+    expect(inferResourceFromOperation("getUsage")).toBe("account");
+    expect(inferResourceFromOperation("getAccountInfo")).toBe("account");
+  });
+});
+
 describe("resolveMessages", () => {
   it("builds a single user message in simple mode", () => {
-    expect(resolveMessages(fakeNode, "simple", "Hello Caedral")).toEqual([
+    expect(resolveMessages("simple", "Hello Caedral")).toEqual([
       { role: "user", content: "Hello Caedral" },
     ]);
   });
 
   it("throws when simple message is empty", () => {
-    expect(() => resolveMessages(fakeNode, "simple", "   ")).toThrow(
-      "Message is required",
-    );
+    expect(() => resolveMessages("simple", "   ")).toThrow(NodeOperationError);
+    expect(() => resolveMessages("simple", "   ")).toThrow("Message is required");
   });
 
   it("parses JSON message arrays", () => {
-    const messages = resolveMessages(fakeNode, "json", undefined, [
+    const messages = resolveMessages("json", undefined, [
       { role: "system", content: "You are helpful." },
       { role: "user", content: "Hi" },
     ]);
@@ -72,30 +74,45 @@ describe("resolveMessages", () => {
 
 describe("parseMessagesJson", () => {
   it("parses JSON strings", () => {
-    const messages = parseMessagesJson(
-      fakeNode,
-      '[{"role":"user","content":"Test"}]',
-    );
+    const messages = parseMessagesJson('[{"role":"user","content":"Test"}]');
     expect(messages).toEqual([{ role: "user", content: "Test" }]);
   });
 
   it("rejects invalid JSON", () => {
-    expect(() => parseMessagesJson(fakeNode, "{not json}")).toThrow(
-      "valid JSON",
-    );
+    expect(() => parseMessagesJson("{not json}")).toThrow(NodeOperationError);
+    expect(() => parseMessagesJson("{not json}")).toThrow("valid JSON");
   });
 
   it("rejects invalid roles", () => {
     expect(() =>
-      parseMessagesJson(fakeNode, '[{"role":"invalid","content":"x"}]'),
+      parseMessagesJson('[{"role":"invalid","content":"x"}]'),
     ).toThrow("invalid role");
+  });
+
+  it("accepts multimodal array content", () => {
+    const messages = parseMessagesJson([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ]);
+    expect(messages[0]?.content).toEqual([{ type: "text", text: "hello" }]);
+  });
+});
+
+describe("isValidChatMessageContent", () => {
+  it("accepts strings and typed part arrays", () => {
+    expect(isValidChatMessageContent("hello")).toBe(true);
+    expect(isValidChatMessageContent([{ type: "text", text: "hi" }])).toBe(true);
+    expect(isValidChatMessageContent([])).toBe(false);
+    expect(isValidChatMessageContent(null)).toBe(false);
   });
 });
 
 describe("buildChatCompletionBody", () => {
   it("builds a minimal request body", () => {
     expect(
-      buildChatCompletionBody(fakeNode, {
+      buildChatCompletionBody({
         model: "caedral-titan",
         messageMode: "simple",
         message: "Hello",
@@ -108,7 +125,7 @@ describe("buildChatCompletionBody", () => {
 
   it("includes optional parameters when provided", () => {
     expect(
-      buildChatCompletionBody(fakeNode, {
+      buildChatCompletionBody({
         model: "caedral-base",
         messageMode: "simple",
         message: "Hello",
@@ -124,7 +141,7 @@ describe("buildChatCompletionBody", () => {
   });
 
   it("prepends system prompt in simple mode", () => {
-    const result = buildChatCompletionBody(fakeNode, {
+    const result = buildChatCompletionBody({
       model: "caedral-base",
       messageMode: "simple",
       message: "Hello",
@@ -137,7 +154,7 @@ describe("buildChatCompletionBody", () => {
   });
 
   it("does not add system prompt in json mode", () => {
-    const result = buildChatCompletionBody(fakeNode, {
+    const result = buildChatCompletionBody({
       model: "caedral-base",
       messageMode: "json",
       messagesJson: [{ role: "user", content: "Hi" }],
@@ -178,6 +195,7 @@ describe("formatUsageForOutput", () => {
     expect(formatUsageForOutput({})).toEqual({
       accountStatus: "unknown",
       balanceCents: 0,
+      balanceMilliCents: 0,
       balanceWeightedUnitsAffordable: 0,
     });
   });
@@ -200,5 +218,30 @@ describe("formatApiErrorMessage", () => {
     expect(formatApiErrorMessage(502, "upstream down")).toBe(
       "Caedral API error (502): upstream down",
     );
+  });
+});
+
+describe("parseDocumentsJson", () => {
+  it("parses a string array", () => {
+    expect(parseDocumentsJson('["a","b"]')).toEqual(["a", "b"]);
+  });
+
+  it("rejects invalid JSON with NodeOperationError", () => {
+    expect(() => parseDocumentsJson("{nope}")).toThrow(NodeOperationError);
+    expect(() => parseDocumentsJson("{nope}")).toThrow("valid JSON");
+  });
+
+  it("rejects non-string arrays", () => {
+    expect(() => parseDocumentsJson("[1,2]")).toThrow("array of strings");
+  });
+});
+
+describe("parseEmbeddingInput", () => {
+  it("keeps plain text", () => {
+    expect(parseEmbeddingInput("hello world")).toBe("hello world");
+  });
+
+  it("parses JSON string arrays", () => {
+    expect(parseEmbeddingInput('["a","b"]')).toEqual(["a", "b"]);
   });
 });

@@ -1,12 +1,20 @@
-import {
+import type {
   INodeType,
   INodeTypeDescription,
   ISupplyDataFunctions,
   SupplyData,
-  UserError, NodeConnectionTypes 
 } from "n8n-workflow";
+import { NodeApiError, NodeConnectionTypes, NodeOperationError, UserError } from "n8n-workflow";
 
-import { normalizeBaseUrl, buildRequestUrl} from "../Caedral/helpers";
+import { EMBEDDING_DIMENSIONS } from "../../shared/constants";
+import {
+  buildRequestUrl,
+  formatApiErrorMessage,
+  normalizeBaseUrl,
+  safeErrorDescription,
+  type CaedralApiErrorBody,
+} from "../Caedral/helpers";
+import { getEmbeddingModels } from "../Caedral/models";
 
 type CaedralCredentials = {
   apiKey: string;
@@ -28,7 +36,7 @@ type InputType = "query" | "document";
 type EncodingFormat = "float" | "base64";
 
 function decodeBase64Embedding(encoded: string, dimensions: number): number[] {
-   const raw = Buffer.from(encoded, "base64");
+  const raw = Buffer.from(encoded, "base64");
   const expectedBytes = dimensions * 4;
   if (raw.length !== expectedBytes) {
     throw new UserError(
@@ -69,8 +77,7 @@ export class CaedralEmbeddings implements INodeType {
     group: ["transform"],
     subtitle: '={{$parameter["model"]}}',
     version: 1,
-    description:
-      "Generate text embeddings via Caedral for use with Vector Store nodes",
+    description: "Generate text embeddings via Caedral for use with Vector Store nodes",
     defaults: {
       name: "Caedral Embeddings",
     },
@@ -97,40 +104,30 @@ export class CaedralEmbeddings implements INodeType {
         name: "dimensions",
         type: "options",
         options: [{ name: "384", value: 384 }],
-        default: 384,
+        default: EMBEDDING_DIMENSIONS,
         required: true,
-        description: 'Native embedding dimension of Caedral E1 Small',
+        description: "Native embedding dimension of Caedral E1 Small",
       },
       {
-        displayName: "Model",
+        displayName: "Model Name or ID",
         name: "model",
         type: "options",
-        options: [
-          {
-            name: "Caedral E1 Small",
-            value: "caedral-embed-e1-small-v1",
-          },
-          {
-            name: 'Caedral Embed (Legacy Alias)',
-            value: "caedral-embed",
-          },
-        ],
+        typeOptions: { loadOptionsMethod: "getEmbeddingModels" },
         default: "caedral-embed-e1-small-v1",
         required: true,
         description:
-          "Caedral E1 Small embedding model (384 native dimensions). Use caedral-embed for legacy prepaid API compatibility.",
+          'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
       },
       {
         displayName: "Encoding Format",
         name: "encodingFormat",
         type: "options",
         options: [
-          { name: "Float", value: "float" },
           { name: "Base64", value: "base64" },
+          { name: "Float", value: "float" },
         ],
         default: "float",
-        description:
-          "Response encoding from the embeddings API. Base64 is decoded to float vectors for Vector Store compatibility.",
+        description: 'Response encoding from the embeddings API. Base64 is decoded to float vectors for Vector Store compatibility.',
       },
       {
         displayName: "Batch Size",
@@ -138,10 +135,15 @@ export class CaedralEmbeddings implements INodeType {
         type: "number",
         typeOptions: { minValue: 1, maxValue: 2048 },
         default: 512,
-        description:
-          "Maximum number of documents to embed in a single API call",
+        description: "Maximum number of documents to embed in a single API call",
       },
     ],
+  };
+
+  methods = {
+    loadOptions: {
+      getEmbeddingModels,
+    },
   };
 
   async supplyData(
@@ -161,35 +163,76 @@ export class CaedralEmbeddings implements INodeType {
     ) as EncodingFormat;
     const batchSize = this.getNodeParameter("batchSize", itemIndex) as number;
     const helpers = this.helpers;
+    const node = this.getNode();
 
     async function callEmbeddings(
       input: string | string[],
       inputType: InputType,
     ): Promise<number[][]> {
       const url = buildRequestUrl(baseUrl, "/v1/embeddings");
-      const response = (await helpers.httpRequest({
-        method: "POST",
-        url,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: {
-          model,
-          dimensions,
-          input,
-          input_type: inputType,
-          encoding_format: encodingFormat,
-        },
-        json: true,
-      })) as EmbeddingResponse;
+      let raw: unknown;
+      try {
+        raw = await helpers.httpRequest({
+          method: "POST",
+          url,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: {
+            model,
+            dimensions,
+            input,
+            input_type: inputType,
+            encoding_format: encodingFormat,
+          },
+          json: true,
+          returnFullResponse: true,
+          ignoreHttpStatusErrors: true,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unexpected error calling Caedral embeddings";
+        throw new NodeApiError(node, { message }, { message, itemIndex });
+      }
 
-      return response.data
-        .sort((a, b) => a.index - b.index)
-        .map((item) =>
-          normalizeEmbedding(item.embedding, encodingFormat, dimensions),
+      const full = raw as { statusCode?: number; body?: EmbeddingResponse };
+      const statusCode = Number(full.statusCode ?? (full.body ? 200 : 0));
+      const responseBody = (full.body ?? raw) as EmbeddingResponse | CaedralApiErrorBody;
+
+      if (statusCode >= 400) {
+        const message = formatApiErrorMessage(
+          statusCode,
+          responseBody as CaedralApiErrorBody,
         );
+        throw new NodeApiError(
+          node,
+          {
+            message,
+            httpCode: String(statusCode),
+            description: safeErrorDescription(responseBody),
+          },
+          {
+            message,
+            httpCode: String(statusCode),
+            description: safeErrorDescription(responseBody),
+            itemIndex,
+          },
+        );
+      }
+
+      const response = responseBody as EmbeddingResponse;
+      try {
+        return response.data
+          .sort((a, b) => a.index - b.index)
+          .map((item) =>
+            normalizeEmbedding(item.embedding, encodingFormat, dimensions),
+          );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new NodeOperationError(node, message, { itemIndex });
+      }
     }
 
     const embeddings = {

@@ -25,8 +25,13 @@ Community node package for [Caedral](https://caedral.com) — chat completions a
    ```json
    "n8n": {
      "n8nNodesApiVersion": 1,
-     "credentials": ["dist/credentials/CaedralApi.credentials.js"],
-     "nodes": ["dist/nodes/Caedral/Caedral.node.js"]
+    "credentials": ["dist/credentials/CaedralApi.credentials.js"],
+    "nodes": [
+      "dist/nodes/Caedral/Caedral.node.js",
+      "dist/nodes/CaedralChatModel/CaedralChatModel.node.js",
+      "dist/nodes/CaedralEmbeddings/CaedralEmbeddings.node.js",
+      "dist/nodes/CaedralTrigger/CaedralTrigger.node.js"
+    ]
    }
    ```
 4. **Required npm metadata**
@@ -38,7 +43,7 @@ Community node package for [Caedral](https://caedral.com) — chat completions a
    ```bash
    npm pack --dry-run
    ```
-   Only `dist/` should ship (plus `README.md` if added to `"files"`).
+   The tarball should contain `dist/`, `README.md`, and `LICENSE` only — no tests, credentials, `.env`, or a CaedralReranker node.
 
 ---
 
@@ -73,7 +78,7 @@ As of **May 1, 2026**, n8n requires verified community nodes to be published fro
 
 A starter workflow is included at `.github/workflows/publish-n8n-node.yml` in this repo. It:
 
-- Triggers on version tags like `n8n-v0.1.0`
+- Triggers on version tags like `n8n-v2.0.0` (this repo’s npm publish workflow; GitHub Release tags may use `v2.0.0`)
 - Runs `npm run build` and `npm publish --provenance --access public`
 - Uses npm **Trusted Publishing** (OIDC) or an `NPM_TOKEN` secret
 
@@ -86,8 +91,8 @@ A starter workflow is included at `.github/workflows/publish-n8n-node.yml` in th
    - Environment: (optional)
 3. Tag and push:
    ```bash
-   git tag n8n-v0.1.0
-   git push origin n8n-v0.1.0
+   git tag n8n-v2.0.0
+   git push origin n8n-v2.0.0
    ```
 
 **Alternative — NPM_TOKEN secret:**

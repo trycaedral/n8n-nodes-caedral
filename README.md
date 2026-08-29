@@ -1,6 +1,10 @@
 # n8n-nodes-caedral
 
-Official [n8n](https://n8n.io/) community node for [Caedral](https://caedral.com) (**v1.0.0**) — chat, vision, embeddings, voice, rerank, AI agents, and account usage through one prepaid API.
+Official [n8n](https://n8n.io/) community node for the [Caedral](https://caedral.com) API (**v2**).
+
+Use Caedral chat, embeddings, rerank, vision, voice, model discovery, and prepaid account usage from n8n workflows. Chat and embeddings also connect to n8n AI Agent, Chain, and Vector Store nodes.
+
+Production API: `https://api.caedral.com`
 
 ## Installation
 
@@ -10,7 +14,7 @@ Official [n8n](https://n8n.io/) community node for [Caedral](https://caedral.com
 2. Enter `n8n-nodes-caedral`
 3. Click **Install**
 
-Or via CLI inside your n8n data directory:
+Or via CLI:
 
 ```bash
 cd ~/.n8n
@@ -30,70 +34,142 @@ Create a **Caedral API** credential:
 | Field | Description |
 |-------|-------------|
 | **API Key** | Your `cd_live_...` key from the [Caedral dashboard](https://caedral.com/dashboard/api-keys) |
-| **Base URL** | Default: `https://api.caedral.com`. Use `http://localhost:5001` for local development |
+| **Base URL** | Default: `https://api.caedral.com`. Use `http://localhost:5001` for a local gateway |
 
-**Setup walkthrough:**
-
-1. Sign up at [caedral.com/signup](https://caedral.com/signup)
-2. Open **Dashboard → API Keys** and create a key
-3. In n8n, go to **Credentials → Add credential → Caedral API**
-4. Paste your API key and save — n8n validates it with `GET /v1/usage`
+n8n tests the credential with `GET /v1/usage` and `Authorization: Bearer <key>`.
 
 API usage (except gated free Base / promo specialized) bills from **prepaid balance**. Top up at [caedral.com/dashboard/billing](https://caedral.com/dashboard/billing).
 
-## Nodes
+## Registered nodes
 
-### Caedral (main node)
+This package registers four nodes (the maximum n8n allows for this mix of node types):
 
-Eight operations covering the full Caedral API:
+| Node | Type | Role |
+|------|------|------|
+| **Caedral** | Action | Chat, embeddings, rerank, vision, voice, models, account |
+| **Caedral Trigger** | Trigger | Poll prepaid balance and fire when it drops below a threshold |
+| **Caedral Chat Model** | AI sub-node | Language model for AI Agent / Chain |
+| **Caedral Embeddings** | AI sub-node | Embeddings for Vector Store nodes |
 
-| Operation | Endpoint | Description |
-|-----------|----------|-------------|
-| **Chat Completion** | `POST /v1/chat/completions` | Send messages to Base, Titan, Olympus, or Primordial |
-| **Generate Image** | `POST /v1/images/generations` | Text-to-image via Caedral Vision |
-| **Create Embedding** | `POST /v1/embeddings` | Vector embeddings via Caedral Embed |
-| **Generate Audio** | `POST /v1/audio/speech` | Text-to-speech via Caedral Voice |
-| **Rerank** | `POST /v1/rerank` | Semantic document reranking |
-| **List Models** | `GET /v1/models` | All available chat and specialized models |
-| **Get Usage** | `GET /v1/usage` | Prepaid balance and account status |
-| **Get Account Info** | `GET /v1/usage` | Prepaid balance and account status |
+The v1 **Caedral Reranker** standalone AI sub-node is **not** registered. n8n community-node verification allows one regular node, one trigger, and up to two AI sub-nodes (chat model and embeddings). Reranking remains available on the main Caedral node (**AI → Rerank**).
 
-Chat supports **Simple** mode (single message + optional system prompt) or **JSON** mode (full messages array).
+## Main node resources
 
-### Caedral Chat Model (AI sub-node)
+The action node uses a **Resource** selector. Execution still keys off the v1 **operation** identifiers, so existing workflows continue to run even if they were saved without `resource`.
 
-Language model sub-node for n8n **AI Agent** and **Chain** nodes. Connect its **Model** output to the agent's language model input.
+### AI
 
-- Select chat tier (Base / Titan / Olympus / Primordial)
-- Configure temperature and max tokens
-- Works with all standard n8n AI Agent tool patterns
+| Operation | Endpoint | Notes |
+|-----------|----------|--------|
+| **Chat Completion** | `POST /v1/chat/completions` | Base, Titan, Olympus, Primordial. Simple or JSON messages. Optional temperature, max tokens, tools, `response_format`, penalties |
+| **Create Embedding** | `POST /v1/embeddings` | `caedral-embed-e1-small-v1` (alias `caedral-embed`), 384 dimensions, `input_type`, `encoding_format` |
+| **Rerank** | `POST /v1/rerank` | `caedral-rerank`, query + documents JSON array, `top_n`, optional minimum score |
 
-### Caedral Embeddings (Vector Store sub-node)
+### Audio
 
-Embedding model sub-node for n8n **Vector Store** nodes. Provides `embedDocuments` and `embedQuery` via `POST /v1/embeddings`.
+| Operation | Endpoint | Notes |
+|-----------|----------|--------|
+| **Generate Audio** | `POST /v1/audio/speech` | `caedral-voice`. Voices: Alloy, Ash, Ballad, Coral, Echo, Sage, Shimmer, Verse, or a custom ID. Default `alloy` |
+
+### Image
+
+| Operation | Endpoint | Notes |
+|-----------|----------|--------|
+| **Generate Image** | `POST /v1/images/generations` | `caedral-vision`. Prompt + size |
+
+### Model
+
+| Operation | Endpoint | Notes |
+|-----------|----------|--------|
+| **List Models** | `GET /v1/models` | Public catalog (chat + specialized) |
+| **Get Model** | `GET /v1/models/:id` | Single model metadata |
+
+### Account
+
+| Operation | Endpoint | Notes |
+|-----------|----------|--------|
+| **Get Account Info** | `GET /v1/usage` | `accountStatus`, `balanceCents`, `balanceMilliCents`, `balanceWeightedUnitsAffordable` |
+| **Get Usage** | `GET /v1/usage` | Same payload (kept for v1 operation compatibility) |
+
+Chat supports **Simple** mode (single message + optional system prompt) or **JSON** mode (full messages array, including tool and multimodal content).
+
+Streaming (`stream: true`) is supported by the Caedral API but is not exposed on the action node. n8n workflows should use non-streaming JSON. Use **Caedral Chat Model** inside an AI Agent for tool-calling loops.
+
+## Model selection
+
+Chat, embedding, rerank, image, and audio model fields load from `GET /v1/models` when credentials are available. The live catalog is filtered by each model's `recommended_endpoint.path` (and by `pricing_tier` / product IDs on the local branded gateway). If the catalog request fails, the node falls back to current Caedral product IDs. Those branded IDs remain in the list even when the public catalog uses a broader model set.
+
+- Chat: `caedral-base`, `caedral-titan`, `caedral-olympus`, `caedral-primordial`
+- Embeddings: `caedral-embed-e1-small-v1`, `caedral-embed`
+- Rerank: `caedral-rerank`
+- Image: `caedral-vision`
+- Audio: `caedral-voice`
+
+You can always set a model ID with an n8n expression.
+
+## AI sub-nodes
+
+### Caedral Chat Model
+
+Connect the **Model** output to an n8n **AI Agent** or **Chain**.
+
+- Dynamic chat model list (default Olympus)
+- Temperature and max tokens
+- Optional timeout and retries on HTTP 429/502/503/504
+- `bindTools` for n8n Tools Agent
+
+### Caedral Embeddings
+
+Connect the **Embeddings** output to a **Vector Store** node.
 
 - Default model: `caedral-embed-e1-small-v1` (Caedral E1 Small, 384 dimensions)
-- Legacy prepaid alias: `caedral-embed` (resolves to E1 Small on Caedral infrastructure)
-- `input_type`: `embedQuery` sends `query`, `embedDocuments` sends `document` (E5-style prefixing)
-- `encoding_format`: `float` (default) or `base64` (decoded to float vectors for Vector Store nodes)
+- Legacy prepaid alias: `caedral-embed`
+- `embedQuery` sends `input_type: query`; `embedDocuments` sends `document`
+- `encoding_format`: Float (default) or Base64 (decoded for Vector Store compatibility)
 - Configurable batch size (default 512)
 
-### Caedral Reranker (Vector Store sub-node)
+## Caedral Trigger
 
-Reranker sub-node for Vector Store retrieval pipelines. Implements LangChain's `compressDocuments` via `POST /v1/rerank`.
-
-- Default model: `caedral-rerank`
-- Top N and minimum relevance score filters
-
-### Caedral Trigger (polling)
-
-Polling trigger for account conditions (configure interval in n8n trigger settings):
+Polling trigger (set the interval in n8n trigger settings):
 
 | Condition | Fires when |
 |-----------|------------|
-| **Balance Below Threshold** | Prepaid balance in cents drops below your threshold |
+| **Balance Below Threshold** | Prepaid balance in USD cents drops below your threshold |
 
-## Models & pricing
+## Upgrade from v1.x to v2.x
+
+### What still works
+
+Existing **Caedral** action-node workflows keep their operation IDs (`chatCompletion`, `createEmbedding`, `rerank`, `audioGeneration`, `imageGeneration`, `listModels`, `getUsage`, `getAccountInfo`). If a workflow was saved without the new `resource` parameter, execution infers the resource from the operation.
+
+Chat **temperature** / **maxTokens**, embeddings input, rerank documents JSON, and credential fields are unchanged.
+
+**Caedral Chat Model** and **Caedral Embeddings** keep the same node names, credentials, and connection types. Subtitles now show the selected model.
+
+### Breaking change: Caedral Reranker sub-node
+
+The standalone **Caedral Reranker** AI sub-node was removed from the package.
+
+n8n's community-node verification policy allows at most two AI sub-nodes in this package (chat model and embeddings). A third AI sub-node type is not permitted, so the Reranker registration was removed.
+
+**Reranking is still supported.** Open the main **Caedral** node, set **Resource** to **AI**, and set **Operation** to **Rerank**.
+
+If a workflow still references `caedralReranker`:
+
+1. Remove the Reranker sub-node
+2. Add **Caedral → AI → Rerank**
+3. Pass the query and a JSON array of document strings
+4. Use **Top N** / **Minimum Score** as before
+
+### Other v2 changes
+
+- Main node UI is grouped by resource (AI, Audio, Image, Model, Account)
+- Model dropdowns load from the live catalog
+- Audio voices match current Caedral Voice (gpt-audio): Alloy, Ash, Ballad, Coral, Echo, Sage, Shimmer, Verse — not the older TTS-1-only Fable / Nova / Onyx set
+- Usage output includes `balanceMilliCents` and no longer invents subscription `plan` / pool fields
+- API errors surface HTTP status and the Caedral `{ error: { type, message, code } }` envelope without leaking credentials
+
+## Models and pricing
 
 Authoritative pricing: [caedral.com/pricing](https://caedral.com/pricing) and [caedral.com/models](https://caedral.com/models). All API usage bills from **prepaid balance** only.
 
@@ -121,28 +197,36 @@ Authoritative pricing: [caedral.com/pricing](https://caedral.com/pricing) and [c
 
 1. Add an **AI Agent** node
 2. Connect **Caedral Chat Model** as the Language Model input
-3. Select **Olympus** for balanced agentic workloads
+3. Select **Olympus** (or another catalog model)
 4. Attach tools (HTTP Request, Code, etc.) to the agent
 
 ### 2. RAG pipeline with embeddings and rerank
 
 1. **Trigger** — new document arrives (webhook, schedule, etc.)
-2. **Caedral** → **Create Embedding** — embed document chunks
-3. Store vectors in your Vector Store node using **Caedral Embeddings** as the embedding model
-4. On query: retrieve candidates, then pass through **Caedral Reranker** for relevance ordering
-5. Feed top results to **Caedral Chat Model** or **Chat Completion** for the final answer
+2. **Caedral** → **AI** → **Create Embedding** — embed document chunks
+3. Store vectors in your Vector Store node using **Caedral Embeddings**
+4. On query: retrieve candidates, then **Caedral** → **AI** → **Rerank**
+5. Feed top results to **Caedral Chat Model** or **Chat Completion**
 
 ### 3. Low balance alert
 
 1. Add **Caedral Trigger** → **Balance Below Threshold**
 2. Set threshold to `1000` (= $10.00)
-3. Connect to Slack, Email, or Discord notification node
+3. Connect to Slack, Email, or Discord
 
 ### 4. Image generation webhook
 
 1. **Webhook** trigger receives `{ "prompt": "..." }`
-2. **Caedral** → **Generate Image** with the prompt
+2. **Caedral** → **Image** → **Generate Image**
 3. Return the image URL or binary in the webhook response
+
+## Compatibility
+
+- n8n: community node API v1 (`n8nNodesApiVersion: 1`)
+- Node.js: >= 18.10
+- Caedral API: current production `/v1` gateway at `https://api.caedral.com`
+
+The gateway is OpenAI-compatible for chat completions. It is not full OpenAI API parity. Supported customer routes are listed above. `GET /health` and `GET /v1/status` exist on the gateway but are not exposed as n8n operations.
 
 ## Development
 
@@ -152,12 +236,14 @@ cd n8n-nodes-caedral
 npm install
 npm run build
 npm test
+npm run lint
 ```
 
-Run the official community scan (requires Node 22+ for the scanner's dependencies):
+Official scanners:
 
 ```bash
-npx @n8n/scan-community-package n8n-nodes-caedral
+npx @n8n/node-cli@latest lint
+npx @n8n/scan-community-package@beta n8n-nodes-caedral
 ```
 
 ### Project structure
@@ -165,10 +251,9 @@ npx @n8n/scan-community-package n8n-nodes-caedral
 ```
 ├── credentials/           # Caedral API credential type
 ├── nodes/
-│   ├── Caedral/           # Main multi-operation node
+│   ├── Caedral/           # Main resource/operation node
 │   ├── CaedralChatModel/  # AI Agent / Chain sub-node
 │   ├── CaedralEmbeddings/ # Vector Store embeddings sub-node
-│   ├── CaedralReranker/   # Vector Store reranker sub-node
 │   └── CaedralTrigger/    # Polling trigger node
 ├── shared/                # Constants and pricing metadata
 ├── tests/                 # Integration tests

@@ -8,20 +8,20 @@ function findOptionValues(
 }
 
 describe("CaedralEmbeddings node", () => {
-  it("exposes E1 Small and legacy caedral-embed models with 384 dimensions", () => {
+  it("exposes E1 Small defaults and dynamic model loading", () => {
     const node = new CaedralEmbeddings();
     const modelProp = node.description.properties.find((p) => p.name === "model");
     const dimProp = node.description.properties.find(
       (p) => p.name === "dimensions",
     );
     expect(modelProp?.type).toBe("options");
-    expect(findOptionValues(modelProp)).toEqual([
-      "caedral-embed-e1-small-v1",
-      "caedral-embed",
-    ]);
+    expect(modelProp?.typeOptions).toMatchObject({
+      loadOptionsMethod: "getEmbeddingModels",
+    });
     expect(modelProp?.default).toBe("caedral-embed-e1-small-v1");
     expect(dimProp?.type).toBe("options");
     expect(dimProp?.default).toBe(384);
+    expect(dimProp?.description).toBe("Native embedding dimension of Caedral E1 Small");
   });
 
   it("routes input_type by embed method without exposing a dead UI control", () => {
@@ -32,7 +32,7 @@ describe("CaedralEmbeddings node", () => {
     const encodingProp = node.description.properties.find(
       (p) => p.name === "encodingFormat",
     );
-    expect(findOptionValues(encodingProp)).toEqual(["float", "base64"]);
+    expect(findOptionValues(encodingProp)).toEqual(["base64", "float"]);
     expect(encodingProp?.default).toBe("float");
   });
 
@@ -53,6 +53,14 @@ describe("CaedralEmbeddings node", () => {
           batchSize: 512,
         };
         return values[name];
+      }),
+      getNode: () => ({
+        id: "emb",
+        name: "Caedral Embeddings",
+        type: "caedralEmbeddings",
+        typeVersion: 1,
+        position: [0, 0],
+        parameters: {},
       }),
       helpers: {
         httpRequest: vi.fn(async (opts: { body: Record<string, unknown> }) => {
@@ -118,6 +126,14 @@ describe("CaedralEmbeddings node", () => {
         };
         return values[name];
       }),
+      getNode: () => ({
+        id: "emb",
+        name: "Caedral Embeddings",
+        type: "caedralEmbeddings",
+        typeVersion: 1,
+        position: [0, 0],
+        parameters: {},
+      }),
       helpers: {
         httpRequest: vi.fn(async () => ({
           model: "caedral-embed-e1-small-v1",
@@ -161,6 +177,14 @@ describe("CaedralEmbeddings node", () => {
           batchSize: 512,
         };
         return values[name];
+      }),
+      getNode: () => ({
+        id: "emb",
+        name: "Caedral Embeddings",
+        type: "caedralEmbeddings",
+        typeVersion: 1,
+        position: [0, 0],
+        parameters: {},
       }),
       helpers: {
         httpRequest: vi.fn(async () => ({

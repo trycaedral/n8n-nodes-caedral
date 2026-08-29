@@ -20,7 +20,7 @@ export class CaedralApi implements ICredentialType {
 
   displayName = "Caedral API";
 
-  documentationUrl = "https://caedral.com/docs";
+  documentationUrl = "https://caedral.com/docs/n8n-overview";
 
   icon = {
     light: "file:../../icons/caedral.svg",
@@ -54,7 +54,7 @@ export class CaedralApi implements ICredentialType {
       type: "string",
       default: DEFAULT_BASE_URL,
       description:
-        "Caedral API gateway URL. Use http://localhost:5001 for local development.",
+        "Caedral API gateway URL. Production default is https://api.caedral.com. Use http://localhost:5001 for local development",
     },
   ];
 

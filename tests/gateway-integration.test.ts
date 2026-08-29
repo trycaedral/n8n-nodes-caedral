@@ -86,8 +86,11 @@ describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors cred
         });
 
         expect(res.status).toBe(200);
-        const body = (await res.json()) as { plan?: string; balanceCents?: number };
-        expect(body.plan).toBeDefined();
+        const body = (await res.json()) as {
+          accountStatus?: string;
+          balanceCents?: number;
+        };
+        expect(typeof body.accountStatus).toBe("string");
         expect(typeof body.balanceCents).toBe("number");
       } finally {
         await cleanup();

@@ -5,9 +5,17 @@ import type {
   INodeTypeDescription,
   IPollFunctions,
 } from "n8n-workflow";
-import { NodeConnectionTypes } from "n8n-workflow";
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from "n8n-workflow";
 
-import { buildRequestUrl, normalizeBaseUrl, type UsageResponse } from "../Caedral/helpers";
+import {
+  buildRequestUrl,
+  formatApiErrorMessage,
+  formatUsageForOutput,
+  normalizeBaseUrl,
+  safeErrorDescription,
+  type CaedralApiErrorBody,
+  type UsageResponse,
+} from "../Caedral/helpers";
 
 type CaedralCredentials = {
   baseUrl?: string;
@@ -28,7 +36,7 @@ export class CaedralTrigger implements INodeType {
     version: 1,
     subtitle: "Balance below threshold",
     description:
-      "Triggers when your Caedral prepaid balance drops below a specified amount (USD cents)",
+      "Triggers when your Caedral prepaid balance drops below a specified amount (USD Cents)",
     defaults: {
       name: "Caedral Trigger",
     },
@@ -50,24 +58,24 @@ export class CaedralTrigger implements INodeType {
           {
             name: "Balance Below Threshold",
             value: "balanceBelow",
-            description:
-              "Trigger when prepaid balance in cents falls below the threshold",
+            description: "Trigger when prepaid balance in cents falls below the threshold",
           },
         ],
         default: "balanceBelow",
       },
       {
-        displayName: 'Balance Threshold (Cents)',
+        displayName: "Balance Threshold (Cents)",
         name: "balanceThreshold",
         type: "number",
         typeOptions: { minValue: 0 },
         displayOptions: { show: { triggerCondition: ["balanceBelow"] } },
         default: 500,
-        description:
-          "Trigger when balance drops below this amount in cents (e.g. 500 = $5.00)",
+        description: "Trigger when balance drops below this amount in cents (e.g. 500 = $5.00)",
       },
     ],
-		usableAsTool: true,
+    // n8n-workflow types only allow `true`, but trigger nodes must not be AI tools.
+    // The community scanner forbids `true` here; the node CLI still requires the field.
+    usableAsTool: false as unknown as true,
   };
 
   async poll(this: IPollFunctions): Promise<INodeExecutionData[][] | null> {
@@ -75,19 +83,48 @@ export class CaedralTrigger implements INodeType {
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
     const triggerCondition = this.getNodeParameter("triggerCondition") as string;
 
-    const response = (await this.helpers.httpRequestWithAuthentication.call(
-      this,
-      "caedralApi",
-      {
+    let raw: unknown;
+    try {
+      raw = await this.helpers.httpRequestWithAuthentication.call(this, "caedralApi", {
         method: "GET",
         url: buildRequestUrl(baseUrl, "/v1/usage"),
         json: true,
-      },
-    )) as UsageResponse;
+        returnFullResponse: true,
+        ignoreHttpStatusErrors: true,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unexpected error calling Caedral API";
+      throw new NodeApiError(this.getNode(), { message }, { message });
+    }
+
+    const full = raw as { statusCode?: number; body?: UsageResponse };
+    const statusCode = Number(full.statusCode ?? (full.body ? 200 : 0));
+    const responseBody = (full.body ?? raw) as UsageResponse | CaedralApiErrorBody;
+
+    if (statusCode >= 400) {
+      const message = formatApiErrorMessage(statusCode, responseBody as CaedralApiErrorBody);
+      throw new NodeApiError(
+        this.getNode(),
+        {
+          message,
+          httpCode: String(statusCode),
+          description: safeErrorDescription(responseBody),
+        },
+        {
+          message,
+          httpCode: String(statusCode),
+          description: safeErrorDescription(responseBody),
+        },
+      );
+    }
+
+    const response = responseBody as UsageResponse;
 
     if (triggerCondition === "balanceBelow") {
       const threshold = this.getNodeParameter("balanceThreshold") as number;
-      const balance = response.balanceCents ?? 0;
+      const usage = formatUsageForOutput(response);
+      const balance = usage.balanceCents;
 
       if (balance < threshold) {
         return [
@@ -96,17 +133,21 @@ export class CaedralTrigger implements INodeType {
               json: {
                 triggered: true,
                 condition: "balanceBelow",
-                balanceCents: balance,
+                ...usage,
                 thresholdCents: threshold,
                 balanceFormatted: `$${(balance / 100).toFixed(2)}`,
                 thresholdFormatted: `$${(threshold / 100).toFixed(2)}`,
-                accountStatus: response.accountStatus ?? "unknown",
                 timestamp: new Date().toISOString(),
               } as IDataObject,
             },
           ],
         ];
       }
+    } else {
+      throw new NodeOperationError(
+        this.getNode(),
+        `Unknown trigger condition: ${triggerCondition}`,
+      );
     }
 
     return null;

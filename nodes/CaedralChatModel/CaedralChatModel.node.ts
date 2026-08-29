@@ -4,14 +4,21 @@ import type {
   ISupplyDataFunctions,
   SupplyData,
 } from "n8n-workflow";
-import { NodeConnectionTypes } from "n8n-workflow";
+import { NodeApiError, NodeConnectionTypes } from "n8n-workflow";
 
-import { MODEL_OPTIONS, normalizeBaseUrl } from "../Caedral/helpers";
+import { DEFAULT_TIMEOUT_MS } from "../../shared/constants";
+import { normalizeBaseUrl } from "../Caedral/helpers";
+import { getChatModels } from "../Caedral/models";
 import { CaedralLangChainChatModel } from "./caedral-langchain-model";
 
 type CaedralCredentials = {
   apiKey: string;
   baseUrl?: string;
+};
+
+type ChatModelOptions = {
+  timeout?: number;
+  maxRetries?: number;
 };
 
 /**
@@ -53,12 +60,13 @@ export class CaedralChatModel implements INodeType {
     ],
     properties: [
       {
-        displayName: "Model Tier",
+        displayName: "Model Name or ID",
         name: "model",
         type: "options",
-        options: [...MODEL_OPTIONS],
+        typeOptions: { loadOptionsMethod: "getChatModels" },
         default: "caedral-olympus",
-        description: "Which Caedral model tier to use for AI Agent completions",
+        description:
+          'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
       },
       {
         displayName: "Temperature",
@@ -76,7 +84,38 @@ export class CaedralChatModel implements INodeType {
         default: 4096,
         description: "Maximum tokens in the response",
       },
+      {
+        displayName: "Options",
+        name: "options",
+        type: "collection",
+        placeholder: "Add Option",
+        default: {},
+        options: [
+          {
+            displayName: "Max Retries",
+            name: "maxRetries",
+            type: "number",
+            typeOptions: { minValue: 0, maxValue: 5 },
+            default: 2,
+            description: "Retries on HTTP 429/502/503/504",
+          },
+          {
+            displayName: "Timeout",
+            name: "timeout",
+            type: "number",
+            typeOptions: { minValue: 1000 },
+            default: DEFAULT_TIMEOUT_MS,
+            description: "Request timeout in milliseconds",
+          },
+        ],
+      },
     ],
+  };
+
+  methods = {
+    loadOptions: {
+      getChatModels,
+    },
   };
 
   async supplyData(this: ISupplyDataFunctions, itemIndex: number): Promise<SupplyData> {
@@ -86,6 +125,8 @@ export class CaedralChatModel implements INodeType {
     const model = this.getNodeParameter("model", itemIndex) as string;
     const temperature = this.getNodeParameter("temperature", itemIndex) as number;
     const maxTokens = this.getNodeParameter("maxTokens", itemIndex) as number;
+    const options = this.getNodeParameter("options", itemIndex, {}) as ChatModelOptions;
+    const node = this.getNode();
 
     const chatModel = new CaedralLangChainChatModel({
       baseUrl,
@@ -93,12 +134,38 @@ export class CaedralChatModel implements INodeType {
       model,
       temperature,
       maxTokens,
-      httpRequest: (options) =>
+      timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
+      maxRetries: options.maxRetries ?? 2,
+      node,
+      httpRequest: (requestOptions) =>
         this.helpers.httpRequest({
-          ...options,
-          body: options.body as Record<string, unknown>,
+          ...requestOptions,
+          body: requestOptions.body as Record<string, unknown>,
         }),
     });
+
+    const originalGenerate = chatModel._generate.bind(chatModel);
+    chatModel._generate = async (...args) => {
+      try {
+        return await originalGenerate(...args);
+      } catch (error) {
+        if (error instanceof NodeApiError) {
+          const payload: { message: string; httpCode?: string; description?: string } = {
+            message: error.message,
+          };
+          if (error.httpCode) payload.httpCode = error.httpCode;
+          if (error.description) payload.description = error.description;
+          throw new NodeApiError(node, payload, {
+            message: error.message,
+            httpCode: error.httpCode ?? undefined,
+            description: error.description ?? undefined,
+            itemIndex,
+          });
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        throw new NodeApiError(node, { message }, { message, itemIndex });
+      }
+    };
 
     return {
       response: chatModel,

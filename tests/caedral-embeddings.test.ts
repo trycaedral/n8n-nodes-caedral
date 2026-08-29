@@ -8,7 +8,7 @@ function findOptionValues(
 }
 
 describe("CaedralEmbeddings node", () => {
-  it("exposes E1 Small defaults and dynamic model loading", () => {
+  it("loads embedding models dynamically without a hardcoded 384-only control", () => {
     const node = new CaedralEmbeddings();
     const modelProp = node.description.properties.find((p) => p.name === "model");
     const dimProp = node.description.properties.find(
@@ -18,10 +18,9 @@ describe("CaedralEmbeddings node", () => {
     expect(modelProp?.typeOptions).toMatchObject({
       loadOptionsMethod: "getEmbeddingModels",
     });
-    expect(modelProp?.default).toBe("caedral-embed-e1-small-v1");
-    expect(dimProp?.type).toBe("options");
-    expect(dimProp?.default).toBe(384);
-    expect(dimProp?.description).toBe("Native embedding dimension of Caedral E1 Small");
+    expect(modelProp?.default).toBe("");
+    expect(dimProp?.type).toBe("number");
+    expect(dimProp?.default).toBe(0);
   });
 
   it("routes input_type by embed method without exposing a dead UI control", () => {
@@ -48,7 +47,7 @@ describe("CaedralEmbeddings node", () => {
       getNodeParameter: vi.fn((name: string) => {
         const values: Record<string, unknown> = {
           model: "caedral-embed-e1-small-v1",
-          dimensions: 384,
+          dimensions: 0,
           encodingFormat: "float",
           batchSize: 512,
         };
@@ -93,11 +92,11 @@ describe("CaedralEmbeddings node", () => {
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toMatchObject({
       model: "caedral-embed-e1-small-v1",
-      dimensions: 384,
       input: "what is RAG?",
       input_type: "query",
       encoding_format: "float",
     });
+    expect(bodies[0]?.dimensions).toBeUndefined();
     expect(bodies[1]).toMatchObject({
       input: ["chunk one", "chunk two"],
       input_type: "document",
@@ -105,7 +104,7 @@ describe("CaedralEmbeddings node", () => {
     });
   });
 
-  it("decodes base64 embeddings to float vectors", async () => {
+  it("decodes base64 embeddings using the payload length when dimensions are omitted", async () => {
     const node = new CaedralEmbeddings();
     const vector = [0.25, -0.5, 0.75];
     const packed = Buffer.alloc(12);
@@ -119,8 +118,8 @@ describe("CaedralEmbeddings node", () => {
       }),
       getNodeParameter: vi.fn((name: string) => {
         const values: Record<string, unknown> = {
-          model: "caedral-embed",
-          dimensions: 3,
+          model: "caedral-embed-e1-small-v1",
+          dimensions: 0,
           encodingFormat: "base64",
           batchSize: 512,
         };

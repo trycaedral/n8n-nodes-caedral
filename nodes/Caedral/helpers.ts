@@ -1,19 +1,10 @@
 import type { INode } from "n8n-workflow";
 import { NodeOperationError } from "n8n-workflow";
 
-import {
-  CHAT_TIER_PRICING,
-  DEFAULT_BASE_URL,
-  MAX_RERANK_DOCUMENTS,
-  RESOURCE_BY_OPERATION,
-  SPECIALIZED_PRICING,
-} from "../../shared/constants";
+import { DEFAULT_BASE_URL, MAX_RERANK_DOCUMENTS, RESOURCE_BY_OPERATION } from "../../shared/constants";
 
-export {
-  CHAT_TIER_PRICING,
-  DEFAULT_BASE_URL,
-  SPECIALIZED_PRICING,
-};
+export { DEFAULT_BASE_URL };
+export type { CatalogModel } from "./catalog";
 
 const VALIDATION_NODE: INode = {
   id: "caedral",
@@ -27,9 +18,6 @@ const VALIDATION_NODE: INode = {
 function validationFail(message: string, itemIndex?: number): never {
   throw new NodeOperationError(VALIDATION_NODE, message, { itemIndex });
 }
-
-/** @deprecated Use FALLBACK_CHAT_MODEL_OPTIONS. Kept for callers that still import MODEL_OPTIONS. */
-export { FALLBACK_CHAT_MODEL_OPTIONS as MODEL_OPTIONS } from "../../shared/constants";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -91,24 +79,6 @@ export type CaedralApiErrorBody = {
     type?: string;
     message?: string;
     code?: number;
-  };
-};
-
-export type CatalogModel = {
-  id: string;
-  object?: string;
-  name?: string;
-  description?: string;
-  context_window?: number;
-  pricing_tier?: string;
-  owned_by?: string;
-  is_caedral_hosted?: boolean;
-  architecture?: {
-    output_modalities?: string[];
-  };
-  recommended_endpoint?: {
-    method?: string;
-    path?: string;
   };
 };
 

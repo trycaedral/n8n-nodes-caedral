@@ -37,7 +37,7 @@ async function createEphemeralKey(): Promise<{ rawKey: string; cleanup: () => Pr
   const keyHash = await bcrypt.hash(rawKey, 10);
   const email = `n8n-test-${userId}@example.com`;
 
-  // Prepaid-only: $0.01 min balance for caedral-base eligibility (not charged).
+  // Prepaid fixture for live local-gateway tests.
   await sql`
     INSERT INTO "user" (id, name, email, email_verified, balance_cents, account_status)
     VALUES (${userId}, ${"N8N Test"}, ${email}, ${true}, ${1}, ${"active"})
@@ -104,8 +104,23 @@ describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors cred
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
+        const catalogRes = await fetch(buildRequestUrl(BASE_URL, "/v1/models"), {
+          headers: {
+            Authorization: `Bearer ${rawKey}`,
+            Accept: "application/json",
+          },
+        });
+        expect(catalogRes.status).toBe(200);
+        const catalog = (await catalogRes.json()) as {
+          data?: Array<{ id: string; recommended_endpoint?: { path?: string } }>;
+        };
+        const chatModel = catalog.data?.find(
+          (model) => model.recommended_endpoint?.path === "/v1/chat/completions",
+        )?.id;
+        expect(chatModel).toBeTruthy();
+
         const body = buildChatCompletionBody({
-          model: "caedral-base",
+          model: chatModel as string,
           messageMode: "simple",
           message: "Reply with: n8n OK",
         });

@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-caedral",
   "version": "2.0.0",
-  "description": "Official n8n community node for Caedral AI — chat, embeddings, rerank, vision, voice, AI agents, and prepaid account usage",
+  "description": "Official n8n community node for Caedral AI — chat, embeddings, rerank, image, speech, transcription, video, AI agents, and prepaid account usage",
   "license": "MIT",
   "keywords": [
     "n8n-community-node-package",
@@ -17,7 +17,9 @@
     "ai-agent",
     "vector-store",
     "embeddings-model",
-    "tts"
+    "tts",
+    "transcription",
+    "video-generation"
   ],
   "author": {
     "name": "Caedral",

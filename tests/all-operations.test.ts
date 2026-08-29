@@ -63,6 +63,28 @@ function headers(apiKey: string) {
   };
 }
 
+type LiveModel = {
+  id: string;
+  recommended_endpoint?: { path?: string };
+};
+
+async function catalogModels(apiKey: string): Promise<LiveModel[]> {
+  const res = await fetch(buildRequestUrl(BASE_URL, "/v1/models"), { headers: headers(apiKey) });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { object?: string; data?: LiveModel[] };
+  expect(Array.isArray(body.data)).toBe(true);
+  expect((body.data ?? []).length).toBeGreaterThan(0);
+  return body.data ?? [];
+}
+
+function firstModelForPath(models: LiveModel[], path: string): string {
+  const match = models.find((model) => model.recommended_endpoint?.path === path);
+  if (!match) {
+    throw new Error(`Live catalog at ${BASE_URL} has no model for ${path}`);
+  }
+  return match.id;
+}
+
 // Live HTTP tests require a running gateway. Opt in with:
 //   DATABASE_URL=... CAEDRAL_GATEWAY_LIVE=1 npm test
 // skipIf is evaluated at collection time — cannot flip after beforeAll.
@@ -89,12 +111,18 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
         const res = await fetch(url, { headers: headers(rawKey) });
         expect(res.status).toBe(200);
 
-        const body = (await res.json()) as { object: string; data: Array<{ id: string }> };
+        const body = (await res.json()) as {
+          object: string;
+          data: Array<{ id: string; recommended_endpoint?: { path?: string } }>;
+        };
         expect(body.object).toBe("list");
         expect(body.data.length).toBeGreaterThan(0);
-        expect(body.data.some((m) => m.id === "caedral-base")).toBe(true);
-        expect(body.data.some((m) => m.id === "caedral-vision")).toBe(true);
-        expect(body.data.some((m) => m.id === "caedral-embed")).toBe(true);
+        const paths = new Set(
+          body.data
+            .map((model) => model.recommended_endpoint?.path)
+            .filter((path): path is string => typeof path === "string"),
+        );
+        expect(paths.size).toBeGreaterThan(0);
       } finally {
         await cleanup();
       }
@@ -135,7 +163,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
           method: "POST",
           headers: headers(rawKey),
           body: JSON.stringify({
-            model: "caedral-base",
+            model: firstModelForPath(await catalogModels(rawKey), "/v1/chat/completions"),
             messages: [
               { role: "system", content: "You are a helpful assistant. Reply with exactly: SYSTEM_OK" },
               { role: "user", content: "Test" },
@@ -167,7 +195,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
           method: "POST",
           headers: headers(rawKey),
           body: JSON.stringify({
-            model: "caedral-embed",
+            model: firstModelForPath(await catalogModels(rawKey), "/v1/embeddings"),
             input: "Hello world",
           }),
         });
@@ -178,7 +206,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
             data?: Array<{ embedding?: number[] }>;
             model?: string;
           };
-          expect(json.model).toBe("caedral-embed");
+          expect(json.model).toBeTruthy();
           expect(json.data?.[0]?.embedding?.length).toBeGreaterThan(0);
         }
       } finally {
@@ -198,7 +226,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
           method: "POST",
           headers: headers(rawKey),
           body: JSON.stringify({
-            model: "caedral-vision",
+            model: firstModelForPath(await catalogModels(rawKey), "/v1/images/generations"),
             prompt: "A red circle on white background",
             size: "1024x1024",
           }),
@@ -226,7 +254,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
           method: "POST",
           headers: headers(rawKey),
           body: JSON.stringify({
-            model: "caedral-voice",
+            model: firstModelForPath(await catalogModels(rawKey), "/v1/audio/speech"),
             input: "Hello world",
             voice: "alloy",
           }),
@@ -254,7 +282,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
           method: "POST",
           headers: headers(rawKey),
           body: JSON.stringify({
-            model: "caedral-rerank",
+            model: firstModelForPath(await catalogModels(rawKey), "/v1/rerank"),
             query: "What is the capital of France?",
             documents: [
               "Paris is the capital of France.",

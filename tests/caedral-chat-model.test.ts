@@ -24,7 +24,7 @@ describe("CaedralLangChainChatModel", () => {
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
       apiKey: "test-key",
-      model: "caedral-olympus",
+      model: "openai/gpt-5-mini",
       temperature: 0.7,
       maxTokens: 1024,
       httpRequest: vi.fn(),
@@ -67,7 +67,7 @@ describe("CaedralLangChainChatModel", () => {
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
       apiKey: "test-key",
-      model: "caedral-olympus",
+      model: "openai/gpt-5-mini",
       temperature: 0.2,
       maxTokens: 512,
       httpRequest,
@@ -130,7 +130,7 @@ describe("CaedralLangChainChatModel", () => {
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
       apiKey: "test-key",
-      model: "caedral-olympus",
+      model: "openai/gpt-5-mini",
       temperature: 0.2,
       maxTokens: 512,
       httpRequest,

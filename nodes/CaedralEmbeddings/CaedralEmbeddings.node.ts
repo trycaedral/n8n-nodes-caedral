@@ -6,7 +6,6 @@ import type {
 } from "n8n-workflow";
 import { NodeApiError, NodeConnectionTypes, NodeOperationError, UserError } from "n8n-workflow";
 
-import { EMBEDDING_DIMENSIONS } from "../../shared/constants";
 import {
   buildRequestUrl,
   formatApiErrorMessage,
@@ -35,16 +34,23 @@ type EmbeddingResponse = {
 type InputType = "query" | "document";
 type EncodingFormat = "float" | "base64";
 
-function decodeBase64Embedding(encoded: string, dimensions: number): number[] {
+function decodeBase64Embedding(encoded: string, dimensions?: number): number[] {
   const raw = Buffer.from(encoded, "base64");
-  const expectedBytes = dimensions * 4;
+  if (raw.length === 0 || raw.length % 4 !== 0) {
+    throw new UserError(
+      `Base64 embedding payload length ${raw.length} is not a multiple of 4 bytes`,
+    );
+  }
+  const inferred = raw.length / 4;
+  const expected = dimensions && dimensions > 0 ? dimensions : inferred;
+  const expectedBytes = expected * 4;
   if (raw.length !== expectedBytes) {
     throw new UserError(
-      `Base64 embedding payload length ${raw.length} does not match ${dimensions} dimensions (${expectedBytes} bytes expected)`,
+      `Base64 embedding payload length ${raw.length} does not match ${expected} dimensions (${expectedBytes} bytes expected)`,
     );
   }
   const floats: number[] = [];
-  for (let i = 0; i < dimensions; i++) {
+  for (let i = 0; i < expected; i++) {
     floats.push(raw.readFloatLE(i * 4));
   }
   return floats;
@@ -53,7 +59,7 @@ function decodeBase64Embedding(encoded: string, dimensions: number): number[] {
 function normalizeEmbedding(
   value: number[] | string,
   encodingFormat: EncodingFormat,
-  dimensions: number,
+  dimensions?: number,
 ): number[] {
   if (encodingFormat === "base64" && typeof value === "string") {
     return decodeBase64Embedding(value, dimensions);
@@ -100,23 +106,23 @@ export class CaedralEmbeddings implements INodeType {
     ],
     properties: [
       {
-        displayName: "Dimensions",
-        name: "dimensions",
-        type: "options",
-        options: [{ name: "384", value: 384 }],
-        default: EMBEDDING_DIMENSIONS,
-        required: true,
-        description: "Native embedding dimension of Caedral E1 Small",
-      },
-      {
         displayName: "Model Name or ID",
         name: "model",
         type: "options",
         typeOptions: { loadOptionsMethod: "getEmbeddingModels" },
-        default: "caedral-embed-e1-small-v1",
+        default: "",
         required: true,
         description:
           'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+      },
+      {
+        displayName: "Dimensions",
+        name: "dimensions",
+        type: "number",
+        typeOptions: { minValue: 0 },
+        default: 0,
+        description:
+          "Optional output dimensionality sent as dimensions. Set to 0 to omit. Do not assume 384 unless the selected model documents that size.",
       },
       {
         displayName: "Encoding Format",
@@ -127,7 +133,7 @@ export class CaedralEmbeddings implements INodeType {
           { name: "Float", value: "float" },
         ],
         default: "float",
-        description: 'Response encoding from the embeddings API. Base64 is decoded to float vectors for Vector Store compatibility.',
+        description: "Response encoding from the embeddings API. Base64 is decoded to float vectors for Vector Store compatibility.",
       },
       {
         displayName: "Batch Size",
@@ -156,7 +162,14 @@ export class CaedralEmbeddings implements INodeType {
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
     const apiKey = credentials.apiKey;
     const model = this.getNodeParameter("model", itemIndex) as string;
-    const dimensions = this.getNodeParameter("dimensions", itemIndex) as number;
+    if (!model?.trim()) {
+      throw new NodeOperationError(
+        this.getNode(),
+        "Model is required. Choose a catalog embedding model or set a model ID with an expression.",
+        { itemIndex },
+      );
+    }
+    const dimensions = this.getNodeParameter("dimensions", itemIndex, 0) as number;
     const encodingFormat = this.getNodeParameter(
       "encodingFormat",
       itemIndex,
@@ -170,6 +183,16 @@ export class CaedralEmbeddings implements INodeType {
       inputType: InputType,
     ): Promise<number[][]> {
       const url = buildRequestUrl(baseUrl, "/v1/embeddings");
+      const body: Record<string, unknown> = {
+        model,
+        input,
+        input_type: inputType,
+        encoding_format: encodingFormat,
+      };
+      if (typeof dimensions === "number" && dimensions > 0) {
+        body.dimensions = dimensions;
+      }
+
       let raw: unknown;
       try {
         raw = await helpers.httpRequest({
@@ -180,13 +203,7 @@ export class CaedralEmbeddings implements INodeType {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: {
-            model,
-            dimensions,
-            input,
-            input_type: inputType,
-            encoding_format: encodingFormat,
-          },
+          body,
           json: true,
           returnFullResponse: true,
           ignoreHttpStatusErrors: true,
@@ -227,7 +244,11 @@ export class CaedralEmbeddings implements INodeType {
         return response.data
           .sort((a, b) => a.index - b.index)
           .map((item) =>
-            normalizeEmbedding(item.embedding, encodingFormat, dimensions),
+            normalizeEmbedding(
+              item.embedding,
+              encodingFormat,
+              dimensions > 0 ? dimensions : undefined,
+            ),
           );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

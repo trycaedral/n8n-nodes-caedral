@@ -1,42 +1,42 @@
+import type { INode } from "n8n-workflow";
+import { NodeOperationError } from "n8n-workflow";
+
 import {
   CHAT_TIER_PRICING,
   DEFAULT_BASE_URL,
+  MAX_RERANK_DOCUMENTS,
+  RESOURCE_BY_OPERATION,
   SPECIALIZED_PRICING,
 } from "../../shared/constants";
 
-export { DEFAULT_BASE_URL, CHAT_TIER_PRICING, SPECIALIZED_PRICING };
+export {
+  CHAT_TIER_PRICING,
+  DEFAULT_BASE_URL,
+  SPECIALIZED_PRICING,
+};
 
-import { INode, NodeOperationError } from "n8n-workflow";
+const VALIDATION_NODE: INode = {
+  id: "caedral",
+  name: "Caedral",
+  type: "n8n-nodes-caedral.caedral",
+  typeVersion: 2,
+  position: [0, 0],
+  parameters: {},
+};
 
-export const MODEL_OPTIONS = [
-  {
-    name: "Base (Free)",
-    value: "caedral-base",
-    description: CHAT_TIER_PRICING.base,
-  },
-  {
-    name: "Titan",
-    value: "caedral-titan",
-    description: CHAT_TIER_PRICING.titan,
-  },
-  {
-    name: "Olympus",
-    value: "caedral-olympus",
-    description: CHAT_TIER_PRICING.olympus,
-  },
-  {
-    name: "Primordial",
-    value: "caedral-primordial",
-    description: CHAT_TIER_PRICING.primordial,
-  },
-] as const;
+function validationFail(message: string, itemIndex?: number): never {
+  throw new NodeOperationError(VALIDATION_NODE, message, { itemIndex });
+}
 
-export type CaedralModelId = (typeof MODEL_OPTIONS)[number]["value"];
+/** @deprecated Use FALLBACK_CHAT_MODEL_OPTIONS. Kept for callers that still import MODEL_OPTIONS. */
+export { FALLBACK_CHAT_MODEL_OPTIONS as MODEL_OPTIONS } from "../../shared/constants";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | unknown[] | null;
   name?: string;
+  tool_call_id?: string;
+  tool_calls?: unknown[];
 };
 
 export type ChatCompletionRequestBody = {
@@ -44,11 +44,20 @@ export type ChatCompletionRequestBody = {
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
+  top_p?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  stop?: string | string[];
+  user?: string;
+  tools?: unknown[];
+  tool_choice?: unknown;
+  response_format?: { type: string };
 };
 
 export type ChatCompletionResponse = {
   id?: string;
   model?: string;
+  provider?: string;
   choices?: Array<{
     index?: number;
     message?: {
@@ -73,6 +82,7 @@ export type ChatCompletionResponse = {
 export type UsageResponse = {
   accountStatus?: string;
   balanceCents?: number;
+  balanceMilliCents?: number;
   balanceWeightedUnitsAffordable?: number;
 };
 
@@ -84,53 +94,242 @@ export type CaedralApiErrorBody = {
   };
 };
 
-/**
- * Normalize a user-supplied base URL for the Caedral API.
- *
- * Trims whitespace, falls back to {@link DEFAULT_BASE_URL} when
- * empty, and strips any trailing slash so that paths can be
- * appended safely.
- *
- * @param baseUrl - Raw base URL from the node credentials.
- * @returns The normalized base URL without a trailing slash.
- */
+export type CatalogModel = {
+  id: string;
+  object?: string;
+  name?: string;
+  description?: string;
+  context_window?: number;
+  pricing_tier?: string;
+  owned_by?: string;
+  is_caedral_hosted?: boolean;
+  architecture?: {
+    output_modalities?: string[];
+  };
+  recommended_endpoint?: {
+    method?: string;
+    path?: string;
+  };
+};
+
 export function normalizeBaseUrl(baseUrl?: string): string {
-  const trimmed = (baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/$/, "");
-  return trimmed;
+  return (baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
-/**
- * Build the JSON body for a `POST /v1/chat/completions` request.
- *
- * Resolves the messages array from either the simple `message`
- * field or the raw `messagesJson`, and includes `temperature` and
- * `max_tokens` only when they are explicitly provided.
- *
- * @param node - The n8n node instance, used to attach context to
- *   any validation errors.
- * @param params - Node parameters collected for the chat completion
- *   operation.
- * @returns A fully-formed request body ready to send to the API.
- * @throws {NodeOperationError} If message resolution fails (missing
- *   text in Simple mode, or invalid JSON in JSON mode).
- */
-export function buildChatCompletionBody(
-  node: INode,
-  params: {
-    model: string;
-    messageMode: "simple" | "json";
-    message?: string;
-    messagesJson?: string | ChatMessage[];
-    temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
-  },
-): ChatCompletionRequestBody {
+export function buildRequestUrl(baseUrl: string, path: string): string {
+  return `${normalizeBaseUrl(baseUrl)}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export function isValidChatMessageContent(content: unknown): boolean {
+  if (content === null || content === undefined) return false;
+  if (typeof content === "string") return true;
+  if (!Array.isArray(content) || content.length === 0) return false;
+  return content.every((part) => {
+    if (typeof part === "string") return true;
+    if (!part || typeof part !== "object") return false;
+    const block = part as { type?: unknown };
+    return typeof block.type === "string" && block.type.trim().length > 0;
+  });
+}
+
+export function parseMessagesJson(
+  raw: string | ChatMessage[] | undefined,
+  itemIndex?: number,
+): ChatMessage[] {
+  if (raw === undefined || raw === null || raw === "") {
+    validationFail(
+      "Messages JSON is required in JSON mode",
+      itemIndex,
+    );
+  }
+
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      validationFail(
+        "Messages JSON must be valid JSON",
+        itemIndex,
+      );
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    validationFail(
+      "Messages JSON must be an array of message objects",
+      itemIndex,
+    );
+  }
+
+  const messages: ChatMessage[] = [];
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== "object" || item === null) {
+      validationFail(
+        `Message at index ${index} must be an object`,
+        itemIndex,
+      );
+    }
+
+    const role = (item as { role?: unknown }).role;
+    const content = (item as { content?: unknown }).content;
+    const name = (item as { name?: unknown }).name;
+    const toolCallId = (item as { tool_call_id?: unknown }).tool_call_id;
+    const toolCalls = (item as { tool_calls?: unknown }).tool_calls;
+
+    if (typeof role !== "string" || !role.trim()) {
+      validationFail(
+        `Message at index ${index} requires a role`,
+        itemIndex,
+      );
+    }
+
+    if (!["system", "user", "assistant", "tool"].includes(role)) {
+      validationFail(
+        `Message at index ${index} has invalid role "${role}"`,
+        itemIndex,
+      );
+    }
+
+    const hasToolCalls =
+      role === "assistant" && Array.isArray(toolCalls) && toolCalls.length > 0;
+
+    if (role === "tool") {
+      if (typeof content !== "string" || typeof toolCallId !== "string") {
+        validationFail(
+          `Message at index ${index} requires string content and tool_call_id`,
+          itemIndex,
+        );
+      }
+    } else if (!hasToolCalls && !isValidChatMessageContent(content)) {
+      validationFail(
+        `Message at index ${index} requires string or multimodal array content`,
+        itemIndex,
+      );
+    }
+
+    const message: ChatMessage = {
+      role: role as ChatMessage["role"],
+      content: (content as ChatMessage["content"]) ?? null,
+    };
+    if (typeof name === "string" && name.trim()) message.name = name;
+    if (typeof toolCallId === "string") message.tool_call_id = toolCallId;
+    if (hasToolCalls) message.tool_calls = toolCalls as unknown[];
+    messages.push(message);
+  }
+
+  return messages;
+}
+
+export function resolveMessages(
+  messageMode: "simple" | "json",
+  message?: string,
+  messagesJson?: string | ChatMessage[],
+  itemIndex?: number,
+): ChatMessage[] {
+  if (messageMode === "simple") {
+    const text = message?.trim();
+    if (!text) {
+      validationFail(
+        "Message is required in Simple mode",
+        itemIndex,
+      );
+    }
+    return [{ role: "user", content: text }];
+  }
+
+  const parsed = parseMessagesJson(messagesJson, itemIndex);
+  if (parsed.length === 0) {
+    validationFail(
+      "Messages JSON must contain at least one message",
+      itemIndex,
+    );
+  }
+  return parsed;
+}
+
+export function parseJsonArrayParameter(
+  raw: unknown,
+  options: { fieldName: string; itemIndex?: number; expectStrings?: boolean },
+): unknown[] {
+  const { fieldName, itemIndex, expectStrings } = options;
+  let value: unknown = raw;
+
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      validationFail(
+        `${fieldName} must be valid JSON`,
+        itemIndex,
+      );
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    validationFail(
+      `${fieldName} must be a valid JSON array`,
+      itemIndex,
+    );
+  }
+
+  if (expectStrings && !value.every((entry) => typeof entry === "string")) {
+    validationFail(
+      `${fieldName} must be a valid JSON array of strings`,
+      itemIndex,
+    );
+  }
+
+  return value;
+}
+
+export function parseDocumentsJson(
+  raw: unknown,
+  itemIndex?: number,
+): string[] {
+  const documents = parseJsonArrayParameter(raw, {
+    fieldName: "Documents",
+    itemIndex,
+    expectStrings: true,
+  }) as string[];
+
+  if (documents.length === 0) {
+    validationFail("At least one document is required", itemIndex);
+  }
+
+  if (documents.length > MAX_RERANK_DOCUMENTS) {
+    validationFail(
+      `Documents exceeds the maximum of ${MAX_RERANK_DOCUMENTS} (got ${documents.length})`,
+      itemIndex,
+    );
+  }
+
+  return documents;
+}
+
+export function buildChatCompletionBody(params: {
+  model: string;
+  messageMode: "simple" | "json";
+  message?: string;
+  messagesJson?: string | ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  systemPrompt?: string;
+  topP?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+  stop?: string | string[];
+  user?: string;
+  toolsJson?: string | unknown[];
+  toolChoice?: string;
+  responseFormat?: string;
+  itemIndex?: number;
+}): ChatCompletionRequestBody {
   const messages = resolveMessages(
-    node,
     params.messageMode,
     params.message,
     params.messagesJson,
+    params.itemIndex,
   );
 
   if (params.systemPrompt && params.messageMode === "simple") {
@@ -145,129 +344,39 @@ export function buildChatCompletionBody(
   if (params.temperature !== undefined && params.temperature !== null) {
     body.temperature = params.temperature;
   }
-
   if (params.maxTokens !== undefined && params.maxTokens !== null) {
     body.max_tokens = params.maxTokens;
+  }
+  if (params.topP !== undefined && params.topP !== null) {
+    body.top_p = params.topP;
+  }
+  if (params.presencePenalty !== undefined && params.presencePenalty !== null) {
+    body.presence_penalty = params.presencePenalty;
+  }
+  if (params.frequencyPenalty !== undefined && params.frequencyPenalty !== null) {
+    body.frequency_penalty = params.frequencyPenalty;
+  }
+  if (params.stop !== undefined && params.stop !== null && params.stop !== "") {
+    body.stop = params.stop;
+  }
+  if (params.user?.trim()) {
+    body.user = params.user.trim();
+  }
+  if (params.responseFormat && params.responseFormat !== "text") {
+    body.response_format = { type: params.responseFormat };
+  }
+  if (params.toolsJson !== undefined && params.toolsJson !== null && params.toolsJson !== "") {
+    const tools = parseJsonArrayParameter(params.toolsJson, {
+      fieldName: "Tools",
+      itemIndex: params.itemIndex,
+    });
+    body.tools = tools;
+    if (params.toolChoice) body.tool_choice = params.toolChoice;
   }
 
   return body;
 }
 
-/**
- * Resolve the effective chat messages array for a request.
- *
- * In `"simple"` mode a single user message is built from the
- * trimmed `message` string. In `"json"` mode the `messagesJson`
- * input is parsed and validated via {@link parseMessagesJson}.
- *
- * @param node - The n8n node instance, used to attach context to
- *   any validation errors.
- * @param messageMode - Which input path to use.
- * @param message - Raw text for Simple mode.
- * @param messagesJson - Raw JSON (string or already-parsed array)
- *   for JSON mode.
- * @returns The validated list of chat messages.
- * @throws {NodeOperationError} If required input is missing or
- *   invalid.
- */
-export function resolveMessages(
-  node: INode,
-  messageMode: "simple" | "json",
-  message?: string,
-  messagesJson?: string | ChatMessage[],
-): ChatMessage[] {
-  if (messageMode === "simple") {
-    const text = message?.trim();
-    if (!text) {
-      throw new NodeOperationError(node, "Message is required in Simple mode.");
-    }
-    return [{ role: "user", content: text }];
-  }
-
-  const parsed = parseMessagesJson(node, messagesJson);
-  if (parsed.length === 0) {
-    throw new NodeOperationError(node, "Messages JSON must contain at least one message.");
-  }
-  return parsed;
-}
-
-/**
- * Parse and validate the raw `messagesJson` node input.
- *
- * Accepts either a JSON-encoded string or an already-decoded array.
- * Each entry must be an object with a supported `role`
- * (`"system" | "user" | "assistant" | "tool"`) and a string
- * `content`.
- *
- * @param node - The n8n node instance, used to attach context to
- *   any validation errors.
- * @param raw - The raw input value provided by the user.
- * @returns The list of validated chat messages.
- * @throws {NodeOperationError} If the value is missing, is not
- *   valid JSON, is not an array, or contains an invalid entry.
- */
-export function parseMessagesJson(
-  node: INode,
-  raw: string | ChatMessage[] | undefined,
-): ChatMessage[] {
-  if (raw === undefined || raw === null || raw === "") {
-    throw new NodeOperationError(node, "Messages JSON is required in JSON mode.");
-  }
-
-  let value: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      throw new NodeOperationError(node, "Messages JSON must be valid JSON.");
-    }
-  }
-
-  if (!Array.isArray(value)) {
-    throw new NodeOperationError(node, "Messages JSON must be an array of message objects.");
-  }
-
-  const messages: ChatMessage[] = [];
-  for (const [index, item] of value.entries()) {
-    if (typeof item !== "object" || item === null) {
-      throw new NodeOperationError(node, `Message at index ${index} must be an object.`);
-    }
-
-    const role = (item as { role?: unknown }).role;
-    const content = (item as { content?: unknown }).content;
-
-    if (typeof role !== "string" || !role.trim()) {
-      throw new NodeOperationError(node, `Message at index ${index} requires a role.`);
-    }
-
-    if (typeof content !== "string") {
-      throw new NodeOperationError(node, `Message at index ${index} requires string content.`);
-    }
-
-    if (!["system", "user", "assistant", "tool"].includes(role)) {
-      throw new NodeOperationError(
-        node,
-        `Message at index ${index} has invalid role "${role}".`,
-      );
-    }
-
-    messages.push({ role: role as ChatMessage["role"], content });
-  }
-
-  return messages;
-}
-
-/**
- * Flatten a raw chat completion response into the shape emitted by
- * the node.
- *
- * Extracts the first choice's content, the model id, the finish
- * reason, and token usage, while also preserving the full `raw`
- * payload for downstream nodes that need it.
- *
- * @param response - Raw API response body.
- * @returns A flattened, node-friendly representation.
- */
 export function parseChatCompletionResponse(
   response: ChatCompletionResponse,
 ): {
@@ -287,45 +396,21 @@ export function parseChatCompletionResponse(
   };
 }
 
-/**
- * Normalize a `GET /v1/usage` response for node output.
- *
- * Matches the gateway prepaid shape: accountStatus, balanceCents,
- * balanceWeightedUnitsAffordable. Legacy pool/subscription fields are
- * not returned.
- *
- * @param usage - Raw usage response from the API.
- * @returns A fully-populated usage object with default values.
- */
 export function formatUsageForOutput(usage: UsageResponse) {
   return {
     accountStatus: usage.accountStatus ?? "unknown",
     balanceCents: usage.balanceCents ?? 0,
-    balanceWeightedUnitsAffordable:
-      usage.balanceWeightedUnitsAffordable ?? 0,
+    balanceMilliCents: usage.balanceMilliCents ?? 0,
+    balanceWeightedUnitsAffordable: usage.balanceWeightedUnitsAffordable ?? 0,
   };
 }
 
-/**
- * Format a human-readable error message from a Caedral API failure.
- *
- * If the body follows the Caedral error envelope
- * (`{ error: { type, message, code } }`), the `type` is prefixed
- * in brackets before the message. Otherwise a generic message
- * including the HTTP status is returned.
- *
- * @param statusCode - HTTP status code of the failing response.
- * @param body - Parsed error body, or the raw text when parsing
- *   failed.
- * @returns A human-readable error message suitable for surfacing
- *   in n8n.
- */
 export function formatApiErrorMessage(
   statusCode: number,
   body: CaedralApiErrorBody | string,
 ): string {
   if (typeof body === "string") {
-    return `Caedral API error (${statusCode}): ${body}`;
+    return `Caedral API error (${statusCode}): ${body}`.slice(0, 500);
   }
 
   const err = body.error;
@@ -337,17 +422,49 @@ export function formatApiErrorMessage(
   return `Caedral API error (${statusCode})`;
 }
 
-/**
- * Compose a full API URL from a base URL and endpoint path.
- *
- * The base URL is passed through {@link normalizeBaseUrl} and the
- * path is prefixed with `/` if it does not already start with one,
- * guaranteeing exactly one slash between the two.
- *
- * @param baseUrl - Base URL for the Caedral API.
- * @param path - Endpoint path (with or without a leading slash).
- * @returns The composed absolute URL.
- */
-export function buildRequestUrl(baseUrl: string, path: string): string {
-  return `${normalizeBaseUrl(baseUrl)}${path.startsWith("/") ? path : `/${path}`}`;
+export function safeErrorDescription(body: unknown): string {
+  if (body === undefined || body === null) return "";
+  try {
+    if (typeof body === "string") return body.slice(0, 2000);
+    const record = body as Record<string, unknown>;
+    const payload =
+      record.error && typeof record.error === "object"
+        ? { error: record.error }
+        : { error: record };
+    return JSON.stringify(payload, null, 2).slice(0, 2000);
+  } catch {
+    return "";
+  }
+}
+
+export function parseEmbeddingInput(
+  inputRaw: string,
+  itemIndex?: number,
+): string | string[] {
+  if (!inputRaw.trim()) {
+    validationFail("Input is required", itemIndex);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(inputRaw);
+  } catch {
+    return inputRaw;
+  }
+
+  if (Array.isArray(parsed) && parsed.every((entry: unknown) => typeof entry === "string")) {
+    if (parsed.length === 0) {
+      validationFail(
+        "Input array must contain at least one string",
+        itemIndex,
+      );
+    }
+    return parsed as string[];
+  }
+
+  return inputRaw;
+}
+
+export function inferResourceFromOperation(operation: string): string {
+  return RESOURCE_BY_OPERATION[operation] ?? "ai";
 }

@@ -8,6 +8,7 @@ function copyDir(src, dest) {
   if (!existsSync(src)) return;
   mkdirSync(dest, { recursive: true });
   for (const entry of readdirSync(src)) {
+    if (entry === "__tests__" || entry === "node_modules") continue;
     const srcPath = join(src, entry);
     const destPath = join(dest, entry);
     if (statSync(srcPath).isDirectory()) {

@@ -1,7 +1,11 @@
-import type { IHttpRequestMethods } from "n8n-workflow";
+import type { IHttpRequestMethods, INode } from "n8n-workflow";
+import { NodeApiError, sleep } from "n8n-workflow";
 
 import {
   buildRequestUrl,
+  formatApiErrorMessage,
+  safeErrorDescription,
+  type CaedralApiErrorBody,
   type ChatCompletionResponse,
 } from "../Caedral/helpers";
 
@@ -11,6 +15,9 @@ type HttpRequestFn = (options: {
   headers?: Record<string, string>;
   body?: Record<string, unknown>;
   json?: boolean;
+  timeout?: number;
+  returnFullResponse?: boolean;
+  ignoreHttpStatusErrors?: boolean;
 }) => Promise<unknown>;
 
 export type OpenAIToolDefinition = {
@@ -68,6 +75,9 @@ type CaedralChatModelConfig = {
   model: string;
   temperature: number;
   maxTokens: number;
+  timeout?: number;
+  maxRetries?: number;
+  node?: INode;
   httpRequest: HttpRequestFn;
 };
 
@@ -413,6 +423,49 @@ function extractToolsFromOptions(options?: GenerateOptions): unknown[] {
   return Array.isArray(tools) ? tools : [];
 }
 
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function placeholderChatNode(): INode {
+  return {
+    id: "caedralChatModel",
+    name: "Caedral Chat Model",
+    type: "n8n-nodes-caedral.CaedralChatModel",
+    typeVersion: 1,
+    position: [0, 0],
+    parameters: {},
+  };
+}
+
+function throwChatApiError(
+  node: INode | undefined,
+  message: string,
+  httpCode?: string,
+  description?: string,
+): never {
+  const payload: { message: string; httpCode?: string; description?: string } = { message };
+  if (httpCode) payload.httpCode = httpCode;
+  if (description) payload.description = description;
+  throw new NodeApiError(node ?? placeholderChatNode(), payload, {
+    message,
+    httpCode,
+    description,
+  });
+}
+
+export class CaedralModelRequestError extends Error {
+  readonly httpCode?: string;
+  readonly description?: string;
+
+  constructor(message: string, httpCode?: string, description?: string) {
+    super(message);
+    this.name = "CaedralModelRequestError";
+    this.httpCode = httpCode;
+    this.description = description;
+  }
+}
+
 export class CaedralLangChainChatModel {
   lc_namespace = ["langchain", "chat_models", "caedral"];
   lc_runnable = true;
@@ -464,42 +517,99 @@ export class CaedralLangChainChatModel {
     }
 
     const url = buildRequestUrl(this.config.baseUrl, "/v1/chat/completions");
-    const response = (await this.config.httpRequest({
-      method: "POST",
-      url,
-      headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body,
-      json: true,
-    })) as ChatCompletionResponse;
+    const maxRetries = this.config.maxRetries ?? 2;
+    let lastError: CaedralModelRequestError | undefined;
 
-    const choice = response.choices?.[0];
-    const message = choice?.message;
-    const content = message?.content ?? null;
-    const toolCalls = parseResponseToolCalls(message?.tool_calls);
-    const aiMessage = createAIMessage(content, toolCalls);
-    const usage = response.usage;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        await sleep(400 * attempt);
+      }
 
-    return {
-      generations: [
-        {
-          text: content ?? "",
-          message: aiMessage,
-          generationInfo: {
-            finishReason: choice?.finish_reason ?? "stop",
+      let raw: unknown;
+      try {
+        raw = await this.config.httpRequest({
+          method: "POST",
+          url,
+          headers: {
+            Authorization: `Bearer ${this.config.apiKey}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body,
+          json: true,
+          timeout: this.config.timeout,
+          returnFullResponse: true,
+          ignoreHttpStatusErrors: true,
+        });
+      } catch (error) {
+        lastError = new CaedralModelRequestError(
+          error instanceof Error ? error.message : "Unexpected error calling Caedral API",
+        );
+        if (attempt === maxRetries) {
+          throwChatApiError(
+            this.config.node,
+            lastError.message,
+            lastError.httpCode,
+            lastError.description,
+          );
+        }
+        continue;
+      }
+
+      const full = raw as { statusCode?: number; body?: ChatCompletionResponse };
+      const statusCode = Number(full.statusCode ?? (full.body ? 200 : 0));
+      const responseBody = (full.body ?? raw) as ChatCompletionResponse | CaedralApiErrorBody;
+
+      if (statusCode >= 400) {
+        lastError = new CaedralModelRequestError(
+          formatApiErrorMessage(statusCode, responseBody as CaedralApiErrorBody),
+          String(statusCode),
+          safeErrorDescription(responseBody),
+        );
+        if (!isRetryableStatus(statusCode) || attempt === maxRetries) {
+          throwChatApiError(
+            this.config.node,
+            lastError.message,
+            lastError.httpCode,
+            lastError.description,
+          );
+        }
+        continue;
+      }
+
+      const response = responseBody as ChatCompletionResponse;
+      const choice = response.choices?.[0];
+      const message = choice?.message;
+      const content = message?.content ?? null;
+      const toolCalls = parseResponseToolCalls(message?.tool_calls);
+      const aiMessage = createAIMessage(content, toolCalls);
+      const usage = response.usage;
+
+      return {
+        generations: [
+          {
+            text: content ?? "",
+            message: aiMessage,
+            generationInfo: {
+              finishReason: choice?.finish_reason ?? "stop",
+            },
+          },
+        ],
+        llmOutput: {
+          tokenUsage: {
+            completionTokens: usage?.completion_tokens ?? 0,
+            promptTokens: usage?.prompt_tokens ?? 0,
+            totalTokens: usage?.total_tokens ?? 0,
           },
         },
-      ],
-      llmOutput: {
-        tokenUsage: {
-          completionTokens: usage?.completion_tokens ?? 0,
-          promptTokens: usage?.prompt_tokens ?? 0,
-          totalTokens: usage?.total_tokens ?? 0,
-        },
-      },
-    };
+      };
+    }
+
+    throwChatApiError(
+      this.config.node,
+      lastError?.message ?? "Caedral chat request failed",
+      lastError?.httpCode,
+      lastError?.description,
+    );
   }
 }

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.0.0 — 2026-08-29
+
+Official n8n integration for the current Caedral production API.
+
+### Breaking
+
+- Removed the standalone **Caedral Reranker** AI sub-node. n8n community-node verification allows one regular node, one trigger, and two AI sub-nodes (chat model and embeddings). Rerank remains available as **Caedral → AI → Rerank**.
+- Audio voices now follow current Caedral Voice (Alloy, Ash, Ballad, Coral, Echo, Sage, Shimmer, Verse). TTS-1-only Fable / Nova / Onyx presets were removed from the dropdown; stored custom values can still be sent via Custom or an expression.
+
+### Added
+
+- Resource selector on the main node: Account, AI, Audio, Image, Model
+- `GET /v1/models/:id` as **Get Model**
+- Dynamic model lists from `GET /v1/models` (with static fallback)
+- Chat options: top_p, stop, penalties, tools JSON, response_format, user
+- Embedding `input_type` and `encoding_format` on the main node
+- Chat Model timeout and retry options
+- Prepaid `balanceMilliCents` on usage output
+- n8n-native `NodeOperationError` / `NodeApiError` handling for validation and HTTP 4xx/5xx
+- Legacy workflows without `resource` infer it from the existing operation id
+
+### Fixed
+
+- n8n review: operations grouped by resource; option lists alphabetized; no raw `Error` from execute/helpers; credentials and subtitles; `(Cents)` / `(Legacy Alias)` copy
+- Usage payload aligned with the current gateway (no subscription plan/pool fields)
+
 ## 1.2.0 — 2026-08-04
 
 OpenRouter provider readiness for the Caedral Embeddings Vector Store sub-node.

@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-caedral",
-  "version": "1.2.0",
-  "description": "n8n community node for Caedral AI — chat, images, embeddings, audio, rerank, AI agents, vector stores, and triggers",
+  "version": "2.0.0",
+  "description": "Official n8n community node for Caedral AI — chat, embeddings, rerank, vision, voice, AI agents, and prepaid account usage",
   "license": "MIT",
   "keywords": [
     "n8n-community-node-package",
@@ -17,7 +17,7 @@
     "ai-agent",
     "vector-store",
     "embeddings-model",
-    "reranker"
+    "tts"
   ],
   "author": {
     "name": "Caedral",
@@ -33,12 +33,18 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "prepublishOnly": "npm run build && npm run lint && npm test"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "engines": {
+    "node": ">=18.10"
+  },
   "homepage": "https://caedral.com/docs/n8n-overview",
   "bugs": {
     "url": "https://github.com/trycaedral/n8n-nodes-caedral/issues"

@@ -31,7 +31,6 @@ export type ChatCompletionRequestBody = {
   model: string;
   messages: ChatMessage[];
   temperature?: number;
-  max_tokens?: number;
   top_p?: number;
   presence_penalty?: number;
   frequency_penalty?: number;
@@ -66,12 +65,42 @@ export type ChatCompletionResponse = {
   };
 };
 
-/** Shape of GET /v1/usage from the API gateway (prepaid only). */
+/** Included quota pool on GET /v1/usage. Milli-cents: $1 = 100_000. */
+export type UsagePool = {
+  usedMilli?: number;
+  limitMilli?: number;
+  usedFormatted?: string;
+  limitFormatted?: string;
+  percentUsed?: number;
+  available?: boolean;
+};
+
+/** Shape of GET /v1/usage from the current Caedral API (plans, pools, on-demand). */
 export type UsageResponse = {
   accountStatus?: string;
-  balanceCents?: number;
-  balanceMilliCents?: number;
-  balanceWeightedUnitsAffordable?: number;
+  plan?: {
+    id?: string;
+    name?: string;
+    interval?: string;
+    status?: string;
+  };
+  billingPeriod?: {
+    start?: string | null;
+    end?: string | null;
+  };
+  pools?: {
+    caedral?: UsagePool;
+    external?: UsagePool;
+  };
+  onDemand?: {
+    mode?: string;
+    allowed?: boolean;
+    blocked?: boolean;
+    accruedMilli?: number;
+    spentMilli?: number;
+    accruedFormatted?: string;
+    spentFormatted?: string;
+  };
 };
 
 export type CaedralApiErrorBody = {
@@ -283,7 +312,6 @@ export function buildChatCompletionBody(params: {
   message?: string;
   messagesJson?: string | ChatMessage[];
   temperature?: number;
-  maxTokens?: number;
   systemPrompt?: string;
   topP?: number;
   presencePenalty?: number;
@@ -313,9 +341,6 @@ export function buildChatCompletionBody(params: {
 
   if (params.temperature !== undefined && params.temperature !== null) {
     body.temperature = params.temperature;
-  }
-  if (params.maxTokens !== undefined && params.maxTokens !== null) {
-    body.max_tokens = params.maxTokens;
   }
   if (params.topP !== undefined && params.topP !== null) {
     body.top_p = params.topP;
@@ -366,13 +391,18 @@ export function parseChatCompletionResponse(
   };
 }
 
-export function formatUsageForOutput(usage: UsageResponse) {
-  return {
-    accountStatus: usage.accountStatus ?? "unknown",
-    balanceCents: usage.balanceCents ?? 0,
-    balanceMilliCents: usage.balanceMilliCents ?? 0,
-    balanceWeightedUnitsAffordable: usage.balanceWeightedUnitsAffordable ?? 0,
-  };
+export function includedPoolPercentUsed(
+  usage: UsageResponse,
+  pool: "caedral" | "external",
+): number | null {
+  const entry = usage.pools?.[pool];
+  if (!entry || typeof entry.percentUsed !== "number" || Number.isNaN(entry.percentUsed)) {
+    return null;
+  }
+  if (pool === "external" && entry.available === false) {
+    return null;
+  }
+  return entry.percentUsed;
 }
 
 export function formatApiErrorMessage(

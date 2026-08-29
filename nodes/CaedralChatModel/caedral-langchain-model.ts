@@ -74,7 +74,6 @@ type CaedralChatModelConfig = {
   apiKey: string;
   model: string;
   temperature: number;
-  maxTokens: number;
   timeout?: number;
   maxRetries?: number;
   node?: INode;
@@ -507,7 +506,6 @@ export class CaedralLangChainChatModel {
       model: this.config.model,
       messages: formatted,
       temperature: this.config.temperature,
-      max_tokens: this.config.maxTokens,
     };
 
     const boundTools = extractToolsFromOptions(options);

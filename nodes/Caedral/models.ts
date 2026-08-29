@@ -1,11 +1,13 @@
 import type { ILoadOptionsFunctions, INodePropertyOptions } from "n8n-workflow";
 import { NodeOperationError } from "n8n-workflow";
 
-import { CATALOG_LOAD_ERROR, CATALOG_TIMEOUT_MS, ENDPOINT_PATHS } from "../../shared/constants";
+import { CATALOG_LOAD_ERROR, CATALOG_TIMEOUT_MS, CATALOG_VOICE_LOAD_ERROR, ENDPOINT_PATHS } from "../../shared/constants";
 import {
   findCatalogModel,
   optionsForEndpoint,
   parseCatalogResponse,
+  parseModelDetailResponse,
+  parseSupportedVoices,
   toCatalogSelectOptions,
   type CatalogModel,
 } from "./catalog";
@@ -111,6 +113,32 @@ export async function getCatalogModels(
   return asNodeOptions(toCatalogSelectOptions(catalog));
 }
 
+async function fetchLiveModel(
+  context: ILoadOptionsFunctions,
+  modelId: string,
+): Promise<CatalogModel | null> {
+  try {
+    const credentials = await context.getCredentials("caedralApi");
+    const baseUrl = normalizeBaseUrl(
+      typeof credentials.baseUrl === "string" ? credentials.baseUrl : undefined,
+    );
+    const response = await context.helpers.httpRequestWithAuthentication.call(
+      context,
+      "caedralApi",
+      {
+        method: "GET",
+        url: buildRequestUrl(baseUrl, `/v1/models/${encodeURIComponent(modelId)}`),
+        json: true,
+        ignoreHttpStatusErrors: true,
+        timeout: CATALOG_TIMEOUT_MS,
+      },
+    );
+    return parseModelDetailResponse(response, modelId);
+  } catch {
+    return null;
+  }
+}
+
 export async function getSpeechVoices(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
@@ -123,12 +151,17 @@ export async function getSpeechVoices(
   if (!modelId) return [];
 
   const catalog = await fetchLiveCatalog(this);
-  const model = findCatalogModel(catalog, modelId);
-  const voices = model?.supported_voices;
-  if (!Array.isArray(voices) || voices.length === 0) return [];
+  const listed = findCatalogModel(catalog, modelId);
+  let voices = parseSupportedVoices(listed?.supported_voices);
 
-  return voices
-    .filter((voice): voice is string => typeof voice === "string" && voice.trim().length > 0)
-    .map((voice) => ({ name: voice, value: voice }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  if (voices.length === 0) {
+    const detail = await fetchLiveModel(this, modelId);
+    voices = parseSupportedVoices(detail?.supported_voices);
+  }
+
+  if (voices.length === 0) {
+    throw new NodeOperationError(this.getNode(), CATALOG_VOICE_LOAD_ERROR);
+  }
+
+  return voices;
 }

@@ -93,6 +93,8 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
       { role: "system", content: "Be brief." },
       { role: "user", content: "Hello!" },
     ]);
+    expect(request.body).not.toHaveProperty("max_tokens");
+    expect(request.body).not.toHaveProperty("max_completion_tokens");
     expect(result[0]?.[0]?.json.content).toBe("Hi there!");
   });
 
@@ -198,26 +200,51 @@ describe("Caedral node — resource operations", () => {
   });
 
   it("gets usage without resource (legacy)", async () => {
+    const usage = {
+      accountStatus: "active",
+      plan: { id: "pro", name: "Pro", interval: "monthly", status: "active" },
+      billingPeriod: { start: "2026-08-01T00:00:00.000Z", end: "2026-09-01T00:00:00.000Z" },
+      pools: {
+        caedral: {
+          usedMilli: 25_000,
+          limitMilli: 100_000,
+          usedFormatted: "$0.25",
+          limitFormatted: "$1.00",
+          percentUsed: 25,
+        },
+        external: {
+          usedMilli: 0,
+          limitMilli: 500_000,
+          usedFormatted: "$0.00",
+          limitFormatted: "$5.00",
+          percentUsed: 0,
+          available: true,
+        },
+      },
+      onDemand: {
+        mode: "disabled",
+        allowed: true,
+        blocked: false,
+        accruedMilli: 0,
+        spentMilli: 0,
+        accruedFormatted: "$0.00",
+        spentFormatted: "$0.00",
+      },
+    };
     const { context } = createContext(
       { operation: "getUsage" },
       async () => ({
         statusCode: 200,
-        body: {
-          accountStatus: "active",
-          balanceCents: 42,
-          balanceMilliCents: 42000,
-          balanceWeightedUnitsAffordable: 10,
-        },
+        body: usage,
       }),
     );
 
     const node = new Caedral();
     const result = await node.execute.call(context);
-    expect(result[0]?.[0]?.json).toMatchObject({
-      accountStatus: "active",
-      balanceCents: 42,
-      balanceMilliCents: 42000,
-    });
+    expect(result[0]?.[0]?.json).toEqual(usage);
+    expect(result[0]?.[0]?.json).not.toHaveProperty("balanceCents");
+    expect(result[0]?.[0]?.json).not.toHaveProperty("balanceMilliCents");
+    expect(result[0]?.[0]?.json).not.toHaveProperty("balanceWeightedUnitsAffordable");
   });
 
   it("creates embeddings without a hardcoded dimension", async () => {
@@ -378,7 +405,7 @@ describe("Caedral node — resource operations", () => {
       async () => ({
         statusCode: 402,
         body: {
-          error: { type: "insufficient_balance", message: "Top up", code: 402 },
+          error: { type: "insufficient_balance", message: "Included quota exhausted", code: 402 },
         },
       }),
       { continueOnFail: true },
@@ -414,6 +441,58 @@ describe("Caedral node — resource operations", () => {
       body: { model: "caedral-voice-1", input: "Hello from Caedral", voice: "caedral-f1" },
     });
     expect(result[0]?.[0]?.binary?.data.mimeType).toBe("audio/wav");
+  });
+
+  it("sends a manually supplied future voice ID unchanged", async () => {
+    const { context, httpRequestWithAuthentication } = createContext(
+      {
+        resource: "audio",
+        operation: "audioGeneration",
+        audioModel: "future-tts/provider-model",
+        audioInput: "Hello from the future",
+        audioVoice: "nova-2030",
+      },
+      async () => ({
+        statusCode: 200,
+        body: Buffer.from("RIFF"),
+        headers: { "content-type": "audio/wav" },
+      }),
+    );
+
+    const node = new Caedral();
+    await node.execute.call(context);
+    expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
+      body: {
+        model: "future-tts/provider-model",
+        input: "Hello from the future",
+        voice: "nova-2030",
+      },
+    });
+  });
+
+  it("surfaces invalid speech voice errors from the API", async () => {
+    const { context } = createContext(
+      {
+        resource: "audio",
+        operation: "audioGeneration",
+        audioModel: "caedral-voice-1",
+        audioInput: "Hello",
+        audioVoice: "not-a-voice",
+      },
+      async () => ({
+        statusCode: 400,
+        body: {
+          error: {
+            type: "invalid_request",
+            message: 'Unknown voice "not-a-voice". Valid voices: caedral-f1, caedral-f2, caedral-m1, caedral-m2.',
+            code: 400,
+          },
+        },
+      }),
+    );
+
+    const node = new Caedral();
+    await expect(node.execute.call(context)).rejects.toBeInstanceOf(NodeApiError);
   });
 
   it("generates an image with a live catalog model ID", async () => {

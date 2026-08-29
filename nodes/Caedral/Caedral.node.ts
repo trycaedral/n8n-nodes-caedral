@@ -9,7 +9,6 @@ import { NodeApiError, NodeConnectionTypes, NodeOperationError, sleep } from "n8
 
 import {
   buildChatCompletionBody,
-  formatUsageForOutput,
   inferResourceFromOperation,
   normalizeBaseUrl,
   parseChatCompletionResponse,
@@ -17,7 +16,6 @@ import {
   parseEmbeddingInput,
   type ChatCompletionResponse,
   type ChatMessage,
-  type UsageResponse,
 } from "./helpers";
 import {
   getCatalogModels,
@@ -161,7 +159,7 @@ export class Caedral implements INodeType {
     version: 2,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description:
-      "Call Caedral AI — chat, embeddings, rerank, image, speech, transcription, video, models, and prepaid account APIs. API usage bills from prepaid balance",
+      "Call Caedral AI — chat, embeddings, rerank, image, speech, transcription, video, models, and account usage",
     defaults: {
       name: "Caedral",
     },
@@ -236,14 +234,14 @@ export class Caedral implements INodeType {
         }
 
         if (operation === "getUsage" || operation === "getAccountInfo") {
-          const usage = await caedralRequest<UsageResponse>(this, {
+          const usage = await caedralRequest<IDataObject>(this, {
             baseUrl,
             method: "GET",
             path: "/v1/usage",
             itemIndex,
           });
           returnData.push({
-            json: formatUsageForOutput(usage) as IDataObject,
+            json: usage,
             pairedItem: { item: itemIndex },
           });
           continue;
@@ -263,7 +261,6 @@ export class Caedral implements INodeType {
               ? this.getNodeParameter("messagesJson", itemIndex, "[]")
               : undefined;
           const temperature = this.getNodeParameter("temperature", itemIndex, 1) as number;
-          const maxTokens = this.getNodeParameter("maxTokens", itemIndex, 0) as number;
           const systemPrompt =
             messageMode === "simple"
               ? (this.getNodeParameter("systemPrompt", itemIndex, "") as string)
@@ -276,7 +273,6 @@ export class Caedral implements INodeType {
             message,
             messagesJson: messagesJson as string | ChatMessage[] | undefined,
             temperature: temperature === 1 ? undefined : temperature,
-            maxTokens: maxTokens > 0 ? maxTokens : undefined,
             systemPrompt: systemPrompt?.trim() || undefined,
             topP: chatOptions.topP && chatOptions.topP > 0 ? chatOptions.topP : undefined,
             presencePenalty:
@@ -419,12 +415,19 @@ export class Caedral implements INodeType {
           if (!inputText.trim()) {
             throw new NodeOperationError(this.getNode(), "Input text is required", { itemIndex });
           }
+          if (!voice) {
+            throw new NodeOperationError(
+              this.getNode(),
+              "Voice is required. Choose a catalog voice or set a voice ID with an expression.",
+              { itemIndex },
+            );
+          }
 
           const body: Record<string, unknown> = {
             model,
             input: inputText.trim(),
+            voice,
           };
-          if (voice) body.voice = voice;
           if (speechOptions.responseFormat?.trim()) {
             body.response_format = speechOptions.responseFormat.trim();
           }

@@ -13,7 +13,7 @@ import { CREDENTIAL_TEST_TIMEOUT_MS, DEFAULT_BASE_URL } from "../shared/constant
  * Collects the user's `apiKey` (stored securely as a password
  * field) and an optional `baseUrl` override for self-hosted or
  * local deployments. The `test` request validates the credentials
- * by hitting `GET /v1/usage`, which requires a valid API key.
+ * by hitting `GET /v1/usage`, the current authenticated account endpoint.
  */
 export class CaedralApi implements ICredentialType {
   name = "caedralApi";

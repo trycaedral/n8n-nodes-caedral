@@ -23,6 +23,9 @@ export const ENDPOINT_PATHS = {
 export const CATALOG_LOAD_ERROR =
   "Could not load models from GET /v1/models. Check the Caedral API credential, or enter a model ID using an expression";
 
+export const CATALOG_VOICE_LOAD_ERROR =
+  "This speech model did not publish voices on GET /v1/models. Enter a voice ID using an expression, or choose a model that lists supported_voices";
+
 /** v1 operation id → v2 resource (used when serialized workflows omit resource). */
 export const RESOURCE_BY_OPERATION: Record<string, string> = {
   chatCompletion: "ai",

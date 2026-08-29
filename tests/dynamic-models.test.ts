@@ -67,6 +67,13 @@ const CATALOG = {
       recommended_endpoint: { method: "POST", path: ENDPOINT_PATHS.audioSpeech },
     },
     {
+      id: "future-tts/provider-model",
+      name: "Provider TTS 2030",
+      owned_by: "future-tts",
+      supported_voices: ["nova-2030", "orion-2030"],
+      recommended_endpoint: { method: "POST", path: ENDPOINT_PATHS.audioSpeech },
+    },
+    {
       id: "deepgram/nova-3",
       name: "Nova-3",
       owned_by: "deepgram",
@@ -89,11 +96,19 @@ const CATALOG = {
 
 function loadContext(
   response: unknown = CATALOG,
-  extras?: { fail?: boolean; modelId?: string; baseUrl?: string },
+  extras?: {
+    fail?: boolean;
+    modelId?: string;
+    baseUrl?: string;
+    byUrl?: (url: string) => unknown;
+  },
 ) {
   const httpRequestWithAuthentication = extras?.fail
     ? vi.fn()
-    : vi.fn(async () => response);
+    : vi.fn(async (_credentialName: string, request: { url: string }) => {
+        if (extras?.byUrl) return extras.byUrl(request.url);
+        return response;
+      });
   return {
     getCredentials: extras?.fail
       ? vi.fn().mockRejectedValue(new Error("missing credentials"))
@@ -274,7 +289,10 @@ describe("dynamic model loading", () => {
     );
     expect(rerank.map((option) => option.value)).toEqual(["BAAI/bge-reranker-v2-m3"]);
     expect(image.map((option) => option.value)).toEqual(["black-forest-labs/flux.2-flex"]);
-    expect(speech.map((option) => option.value)).toEqual(["caedral-voice-1"]);
+    expect(speech.map((option) => option.value)).toEqual([
+      "caedral-voice-1",
+      "future-tts/provider-model",
+    ]);
     expect(transcription.map((option) => option.value)).toEqual(["deepgram/nova-3"]);
     expect(video.map((option) => option.value)).toEqual(["alibaba/wan-2.6"]);
     expect(all.some((option) => option.value === "future-lab/widget-1")).toBe(true);
@@ -299,10 +317,65 @@ describe("dynamic model loading", () => {
     const context = loadContext(CATALOG, { modelId: "caedral-voice-1" });
     const voices = await getSpeechVoices.call(context as never);
     expect(voices.map((option) => option.value).sort()).toEqual(["caedral-f1", "caedral-m1"]);
+    expect(context.helpers.httpRequestWithAuthentication).toHaveBeenCalledTimes(1);
   });
 
-  it("returns no voices when the selected model has none", async () => {
+  it("loads a different voice list for a different speech model", async () => {
+    const context = loadContext(CATALOG, { modelId: "future-tts/provider-model" });
+    const voices = await getSpeechVoices.call(context as never);
+    expect(voices.map((option) => option.value).sort()).toEqual(["nova-2030", "orion-2030"]);
+    expect(voices.every((option) => !["caedral-f1", "caedral-m1"].includes(String(option.value)))).toBe(
+      true,
+    );
+  });
+
+  it("does not inject a universal static voice list", async () => {
+    const context = loadContext(CATALOG, { modelId: "future-tts/provider-model" });
+    const voices = await getSpeechVoices.call(context as never);
+    const ids = voices.map((option) => option.value);
+    for (const stale of ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]) {
+      expect(ids).not.toContain(stale);
+    }
+  });
+
+  it("loads voices from GET /v1/models/:id when the list omits supported_voices", async () => {
+    const listWithoutVoices = {
+      object: "list",
+      data: CATALOG.data.map((model) =>
+        model.id === "future-tts/provider-model"
+          ? { ...model, supported_voices: undefined }
+          : model,
+      ),
+    };
+    const context = loadContext(listWithoutVoices, {
+      modelId: "future-tts/provider-model",
+      byUrl: (url) => {
+        if (url.endsWith("/v1/models")) return listWithoutVoices;
+        expect(url).toContain("/v1/models/future-tts%2Fprovider-model");
+        return {
+          id: "future-tts/provider-model",
+          supported_voices: [
+            { id: "nova-2030", name: "Nova 2030" },
+            { id: "orion-2030", name: "Orion 2030" },
+          ],
+        };
+      },
+    });
+    const voices = await getSpeechVoices.call(context as never);
+    expect(voices).toEqual([
+      { name: "Nova 2030", value: "nova-2030" },
+      { name: "Orion 2030", value: "orion-2030" },
+    ]);
+  });
+
+  it("throws when the selected model publishes no voices", async () => {
     const context = loadContext(CATALOG, { modelId: "openai/gpt-5-mini" });
+    await expect(getSpeechVoices.call(context as never)).rejects.toBeInstanceOf(NodeOperationError);
+    await expect(getSpeechVoices.call(context as never)).rejects.toThrow(/supported_voices/);
+  });
+
+  it("returns no voices until a speech model is selected", async () => {
+    const context = loadContext(CATALOG, { modelId: "" });
     await expect(getSpeechVoices.call(context as never)).resolves.toEqual([]);
   });
 });

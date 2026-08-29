@@ -33,13 +33,13 @@ export const caedralProperties: INodeProperties[] = [
       {
         name: "Get Account Info",
         value: "getAccountInfo",
-        description: "Get prepaid balance and account status",
+        description: "Get current plan, included quota, and on-demand usage",
         action: "Get account info",
       },
       {
         name: "Get Usage",
         value: "getUsage",
-        description: "Get prepaid balance and account status (same as Get Account Info)",
+        description: "Get current plan, included quota, and on-demand usage (same as Get Account Info)",
         action: "Get usage",
       },
     ],
@@ -227,15 +227,6 @@ export const caedralProperties: INodeProperties[] = [
     displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
     default: 1,
     description: "Sampling temperature (0–2). The default 1 is omitted from the request.",
-  },
-  {
-    displayName: "Max Tokens",
-    name: "maxTokens",
-    type: "number",
-    typeOptions: { minValue: 1 },
-    displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
-    default: 0,
-    description: "Maximum tokens to generate. Set to 0 to omit from the request.",
   },
   {
     displayName: "Options",
@@ -517,6 +508,7 @@ export const caedralProperties: INodeProperties[] = [
     },
     displayOptions: { show: { resource: ["audio"], operation: ["audioGeneration"] } },
     default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },

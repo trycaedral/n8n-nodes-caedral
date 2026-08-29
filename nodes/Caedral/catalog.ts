@@ -23,7 +23,7 @@ export type CatalogModel = {
   is_caedral_hosted?: boolean;
   is_free?: boolean;
   supported_parameters?: string[];
-  supported_voices?: string[];
+  supported_voices?: unknown;
   default_parameters?: Record<string, unknown>;
   architecture?: {
     modality?: string;
@@ -102,6 +102,63 @@ export function findCatalogModel(
   modelId: string,
 ): CatalogModel | undefined {
   return models.find((model) => model.id === modelId);
+}
+
+export function parseModelDetailResponse(
+  response: unknown,
+  modelId: string,
+): CatalogModel | null {
+  const listed = parseCatalogResponse(response);
+  if (listed) {
+    return findCatalogModel(listed, modelId) ?? null;
+  }
+
+  const root = asRecord(response);
+  if (!root) return null;
+
+  if (typeof root.statusCode === "number" && root.statusCode >= 400) {
+    return null;
+  }
+
+  const body = asRecord(root.body) ?? root;
+  if (typeof body.statusCode === "number" && body.statusCode >= 400) {
+    return null;
+  }
+
+  if (typeof body.id === "string" && body.id.trim().length > 0) {
+    return body as CatalogModel;
+  }
+
+  return null;
+}
+
+export function parseSupportedVoices(raw: unknown): CatalogSelectOption[] {
+  if (!Array.isArray(raw)) return [];
+
+  const options: CatalogSelectOption[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of raw) {
+    let value = "";
+    let name = "";
+
+    if (typeof entry === "string") {
+      value = entry.trim();
+      name = value;
+    } else {
+      const record = asRecord(entry);
+      if (!record) continue;
+      value = firstNonEmpty(record.id, record.voice, record.value);
+      name = firstNonEmpty(record.name, record.display_name, record.label) || value;
+    }
+
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    options.push({ name, value });
+  }
+
+  options.sort((a, b) => a.name.localeCompare(b.name));
+  return options;
 }
 
 function firstNonEmpty(...values: unknown[]): string {

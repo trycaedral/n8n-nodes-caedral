@@ -37,7 +37,7 @@ export class CaedralChatModel implements INodeType {
     group: ["transform"],
     subtitle: '={{$parameter["model"]}}',
     version: 1,
-    description: "Use Caedral chat-capable models with AI Agent and Chain nodes (prepaid API balance)",
+    description: "Use Caedral chat-capable models with AI Agent and Chain nodes",
     defaults: {
       name: "Caedral Chat Model",
     },
@@ -76,14 +76,6 @@ export class CaedralChatModel implements INodeType {
         typeOptions: { minValue: 0, maxValue: 2, numberStepSize: 0.1 },
         default: 0.7,
         description: "Sampling temperature for responses",
-      },
-      {
-        displayName: "Max Tokens",
-        name: "maxTokens",
-        type: "number",
-        typeOptions: { minValue: 1 },
-        default: 4096,
-        description: "Maximum tokens in the response",
       },
       {
         displayName: "Options",
@@ -133,7 +125,6 @@ export class CaedralChatModel implements INodeType {
       );
     }
     const temperature = this.getNodeParameter("temperature", itemIndex) as number;
-    const maxTokens = this.getNodeParameter("maxTokens", itemIndex) as number;
     const options = this.getNodeParameter("options", itemIndex, {}) as ChatModelOptions;
 
     const chatModel = new CaedralLangChainChatModel({
@@ -141,7 +132,6 @@ export class CaedralChatModel implements INodeType {
       apiKey,
       model,
       temperature,
-      maxTokens,
       timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
       maxRetries: options.maxRetries ?? 2,
       node,

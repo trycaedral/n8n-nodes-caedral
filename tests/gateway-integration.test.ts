@@ -37,7 +37,7 @@ async function createEphemeralKey(): Promise<{ rawKey: string; cleanup: () => Pr
   const keyHash = await bcrypt.hash(rawKey, 10);
   const email = `n8n-test-${userId}@example.com`;
 
-  // Prepaid fixture for live local-gateway tests.
+  // Minimal user row for optional local-gateway tests.
   await sql`
     INSERT INTO "user" (id, name, email, email_verified, balance_cents, account_status)
     VALUES (${userId}, ${"N8N Test"}, ${email}, ${true}, ${1}, ${"active"})
@@ -88,10 +88,14 @@ describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors cred
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
           accountStatus?: string;
+          plan?: { id?: string };
+          pools?: { caedral?: { percentUsed?: number } };
           balanceCents?: number;
         };
         expect(typeof body.accountStatus).toBe("string");
-        expect(typeof body.balanceCents).toBe("number");
+        expect(body.plan).toBeTypeOf("object");
+        expect(body.pools).toBeTypeOf("object");
+        expect(body.balanceCents).toBeUndefined();
       } finally {
         await cleanup();
       }

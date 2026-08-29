@@ -36,7 +36,7 @@ async function createEphemeralKey(): Promise<{
   const keyHash = await bcrypt.hash(rawKey, 10);
   const email = `n8n-ops-test-${userId}@example.com`;
 
-  // Prepaid-only fixture (subscriptions table removed in API-only pivot).
+  // Minimal user row for optional local-gateway tests.
   await sql`
     INSERT INTO "user" (id, name, email, email_verified, balance_cents, account_status)
     VALUES (${userId}, ${"N8N Ops Test"}, ${email}, ${true}, ${5000}, ${"active"})
@@ -66,6 +66,7 @@ function headers(apiKey: string) {
 type LiveModel = {
   id: string;
   recommended_endpoint?: { path?: string };
+  supported_voices?: string[];
 };
 
 async function catalogModels(apiKey: string): Promise<LiveModel[]> {
@@ -141,11 +142,16 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
 
         const body = (await res.json()) as {
           accountStatus?: string;
+          plan?: { id?: string; name?: string };
+          pools?: { caedral?: { percentUsed?: number } };
+          onDemand?: { mode?: string };
           balanceCents?: number;
-          balanceMilliCents?: number;
         };
         expect(typeof body.accountStatus).toBe("string");
-        expect(typeof body.balanceCents).toBe("number");
+        expect(body.plan).toBeTypeOf("object");
+        expect(body.pools).toBeTypeOf("object");
+        expect(body.onDemand).toBeTypeOf("object");
+        expect(body.balanceCents).toBeUndefined();
       } finally {
         await cleanup();
       }
@@ -250,13 +256,19 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
         const url = buildRequestUrl(BASE_URL, "/v1/audio/speech");
+        const models = await catalogModels(rawKey);
+        const speechModel = models.find(
+          (model) => model.recommended_endpoint?.path === "/v1/audio/speech",
+        );
+        expect(speechModel?.id).toBeTruthy();
+        const voice = speechModel?.supported_voices?.[0];
         const res = await fetch(url, {
           method: "POST",
           headers: headers(rawKey),
           body: JSON.stringify({
-            model: firstModelForPath(await catalogModels(rawKey), "/v1/audio/speech"),
+            model: speechModel?.id,
             input: "Hello world",
-            voice: "alloy",
+            ...(voice ? { voice } : {}),
           }),
         });
 

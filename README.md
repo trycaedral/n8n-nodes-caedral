@@ -2,7 +2,7 @@
 
 Official [n8n](https://n8n.io/) community node for the [Caedral](https://caedral.com) API (**v2**).
 
-Use Caedral chat, embeddings, rerank, image generation, speech, transcription, video generation, model discovery, and prepaid account usage from n8n workflows. Chat and embeddings also connect to n8n AI Agent, Chain, and Vector Store nodes.
+Use Caedral chat, embeddings, rerank, image generation, speech, transcription, video generation, model discovery, and account usage from n8n workflows. Chat and embeddings also connect to n8n AI Agent, Chain, and Vector Store nodes.
 
 Production API: `https://api.caedral.com`
 
@@ -44,9 +44,9 @@ Create a **Caedral API** credential:
 | **API Key** | Your `cd_live_...` key from the [Caedral dashboard](https://caedral.com/dashboard/api-keys) |
 | **Base URL** | Default: `https://api.caedral.com`. Use `http://localhost:5001` for a local gateway |
 
-n8n tests the credential with `GET /v1/usage` and `Authorization: Bearer <key>`.
+n8n tests the credential with `GET /v1/usage` and `Authorization: Bearer <key>`. A valid key with no paid plan is still testable if Caedral allows free models.
 
-API usage bills from **prepaid balance**. Top up at [caedral.com/dashboard/billing](https://caedral.com/dashboard/billing).
+Usage follows Caedral **plans**, **included quotas**, and **on-demand** usage. See [caedral.com/dashboard/billing](https://caedral.com/dashboard/billing).
 
 ## Registered nodes
 
@@ -55,7 +55,7 @@ This package registers four nodes (the maximum n8n allows for this mix of node t
 | Node | Type | Role |
 |------|------|------|
 | **Caedral** | Action | Chat, embeddings, rerank, image, speech, transcription, video, models, account |
-| **Caedral Trigger** | Trigger | Poll prepaid balance and fire when it drops below a threshold |
+| **Caedral Trigger** | Trigger | Poll included pool usage and fire when percent used reaches a threshold |
 | **Caedral Chat Model** | AI sub-node | Language model for AI Agent / Chain |
 | **Caedral Embeddings** | AI sub-node | Embeddings for Vector Store nodes |
 
@@ -71,7 +71,7 @@ Each operation's model dropdown loads only models whose live `recommended_endpoi
 
 | Operation | Endpoint | Notes |
 |-----------|----------|--------|
-| **Chat Completion** | `POST /v1/chat/completions` | Chat-capable catalog models. Simple or JSON messages. Optional temperature, max tokens, tools, `response_format`, penalties |
+| **Chat Completion** | `POST /v1/chat/completions` | Chat-capable catalog models. Simple or JSON messages. Optional temperature, tools, `response_format`, penalties. Does not send an output token cap |
 | **Create Embedding** | `POST /v1/embeddings` | Embedding-capable catalog models. Optional `dimensions` (omit unless the model supports it), `input_type`, `encoding_format` |
 | **Rerank** | `POST /v1/rerank` | Rerank-capable catalog models. Query + documents JSON array, `top_n`, optional minimum score |
 
@@ -79,7 +79,7 @@ Each operation's model dropdown loads only models whose live `recommended_endpoi
 
 | Operation | Endpoint | Notes |
 |-----------|----------|--------|
-| **Generate Speech** | `POST /v1/audio/speech` | Speech-capable catalog models. Voices come from the selected model's `supported_voices`. Returns binary audio |
+| **Generate Speech** | `POST /v1/audio/speech` | Speech-capable catalog models. Voice dropdown loads `supported_voices` for the selected model (`GET /v1/models`, then `GET /v1/models/:id` if needed). Returns binary audio |
 | **Transcribe Audio** | `POST /v1/audio/transcriptions` | Transcription-capable catalog models. Binary file (multipart) or audio URL (JSON `file`) |
 
 ### Image
@@ -109,7 +109,7 @@ Video generation is **asynchronous**. `POST /v1/videos` returns a job. Poll stat
 
 | Operation | Endpoint | Notes |
 |-----------|----------|--------|
-| **Get Account Info** | `GET /v1/usage` | `accountStatus`, `balanceCents`, `balanceMilliCents`, `balanceWeightedUnitsAffordable` |
+| **Get Account Info** | `GET /v1/usage` | Current API payload: `accountStatus`, `plan`, `billingPeriod`, `pools` (caedral/external quota), `onDemand` |
 | **Get Usage** | `GET /v1/usage` | Same payload (kept for v1 operation compatibility) |
 
 Chat supports **Simple** mode (single message + optional system prompt) or **JSON** mode (full messages array, including tool and multimodal content).
@@ -135,7 +135,7 @@ The following historical IDs are **not** valid production models and are not off
 Connect the **Model** output to an n8n **AI Agent** or **Chain**.
 
 - Dynamic chat model list (filtered to `/v1/chat/completions`)
-- Temperature and max tokens
+- Temperature (no output token-limit control)
 - Optional timeout and retries on HTTP 429/502/503/504
 - `bindTools` for n8n Tools Agent
 
@@ -155,7 +155,8 @@ Polling trigger (set the interval in n8n trigger settings):
 
 | Condition | Fires when |
 |-----------|------------|
-| **Balance Below Threshold** | Prepaid balance in USD cents drops below your threshold |
+| **Caedral Pool Usage At or Above %** | `pools.caedral.percentUsed` from `GET /v1/usage` is at or above the threshold |
+| **External Pool Usage At or Above %** | `pools.external.percentUsed` is at or above the threshold (skipped when that pool is unavailable) |
 
 ## Upgrade from v1.x to v2.x
 
@@ -163,7 +164,7 @@ Polling trigger (set the interval in n8n trigger settings):
 
 Existing **Caedral** action-node workflows keep their operation IDs (`chatCompletion`, `createEmbedding`, `rerank`, `audioGeneration`, `imageGeneration`, `listModels`, `getUsage`, `getAccountInfo`). If a workflow was saved without the new `resource` parameter, execution infers the resource from the operation.
 
-Chat **temperature** / **maxTokens**, embeddings input, rerank documents JSON, and credential fields are unchanged.
+Chat **temperature**, embeddings input, rerank documents JSON, and credential fields still work. Saved `maxTokens` values are ignored and are not sent to the API.
 
 **Caedral Chat Model** and **Caedral Embeddings** keep the same node names, credentials, and connection types. Subtitles now show the selected model.
 
@@ -187,8 +188,9 @@ If a workflow still references `caedralReranker`:
 - Main node UI is grouped by resource (Account, AI, Audio, Image, Model, Video)
 - Model dropdowns load from the live catalog and filter by recommended endpoint
 - Obsolete branded chat-tier IDs are not selectable production fallbacks
-- Speech returns binary audio; voices are per-model
-- Usage output includes `balanceMilliCents` and no longer invents subscription `plan` / pool fields
+- Speech returns binary audio; voices load from the selected model's `supported_voices`
+- Usage output is the current `GET /v1/usage` payload (`plan`, `pools`, `onDemand`)
+- Chat completion does not send `max_tokens` / `max_completion_tokens`
 - API errors surface HTTP status and the Caedral `{ error: { type, message, code } }` envelope without leaking credentials
 
 ## Example workflows
@@ -208,10 +210,10 @@ If a workflow still references `caedralReranker`:
 4. On query: retrieve candidates, then **Caedral** → **AI** → **Rerank**
 5. Feed top results to **Caedral Chat Model** or **Chat Completion**
 
-### 3. Low balance alert
+### 3. Included pool usage alert
 
-1. Add **Caedral Trigger** → **Balance Below Threshold**
-2. Set threshold to `1000` (= $10.00)
+1. Add **Caedral Trigger** → **Caedral Pool Usage At or Above %**
+2. Set the percent threshold (default 80)
 3. Connect to Slack, Email, or Discord
 
 ### 4. Image generation webhook

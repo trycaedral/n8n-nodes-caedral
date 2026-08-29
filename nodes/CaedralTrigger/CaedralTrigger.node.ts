@@ -11,7 +11,7 @@ import { DEFAULT_TIMEOUT_MS } from "../../shared/constants";
 import {
   buildRequestUrl,
   formatApiErrorMessage,
-  formatUsageForOutput,
+  includedPoolPercentUsed,
   normalizeBaseUrl,
   safeErrorDescription,
   type CaedralApiErrorBody,
@@ -22,8 +22,10 @@ type CaedralCredentials = {
   baseUrl?: string;
 };
 
+type TriggerPool = "caedral" | "external";
+
 /**
- * Caedral Trigger — polling trigger for prepaid balance alerts.
+ * Caedral Trigger — polling trigger for included pool usage.
  */
 export class CaedralTrigger implements INodeType {
   description: INodeTypeDescription = {
@@ -35,9 +37,9 @@ export class CaedralTrigger implements INodeType {
     },
     group: ["trigger"],
     version: 1,
-    subtitle: "Balance below threshold",
+    subtitle: "Included pool usage",
     description:
-      "Triggers when your Caedral prepaid balance drops below a specified amount (USD Cents)",
+      "Triggers when included Caedral or external pool usage reaches a percent threshold",
     defaults: {
       name: "Caedral Trigger",
     },
@@ -57,21 +59,28 @@ export class CaedralTrigger implements INodeType {
         type: "options",
         options: [
           {
-            name: "Balance Below Threshold",
-            value: "balanceBelow",
-            description: "Trigger when prepaid balance in cents falls below the threshold",
+            name: "Caedral Pool Usage At or Above %",
+            value: "caedralPoolPercentAtOrAbove",
+            description:
+              "Trigger when pools.caedral.percentUsed from GET /v1/usage is at or above the threshold",
+          },
+          {
+            name: "External Pool Usage At or Above %",
+            value: "externalPoolPercentAtOrAbove",
+            description:
+              "Trigger when pools.external.percentUsed from GET /v1/usage is at or above the threshold",
           },
         ],
-        default: "balanceBelow",
+        default: "caedralPoolPercentAtOrAbove",
       },
       {
-        displayName: "Balance Threshold (Cents)",
-        name: "balanceThreshold",
+        displayName: "Usage Percent",
+        name: "usagePercent",
         type: "number",
-        typeOptions: { minValue: 0 },
-        displayOptions: { show: { triggerCondition: ["balanceBelow"] } },
-        default: 500,
-        description: "Trigger when balance drops below this amount in cents (e.g. 500 = $5.00)",
+        typeOptions: { minValue: 0, maxValue: 100 },
+        default: 80,
+        description:
+          "Trigger when the selected included pool's percentUsed is at or above this value",
       },
     ],
     // n8n-workflow types only allow `true`, but trigger nodes must not be AI tools.
@@ -83,6 +92,29 @@ export class CaedralTrigger implements INodeType {
     const credentials = (await this.getCredentials("caedralApi")) as CaedralCredentials;
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
     const triggerCondition = this.getNodeParameter("triggerCondition") as string;
+
+    if (triggerCondition === "balanceBelow") {
+      throw new NodeOperationError(
+        this.getNode(),
+        "Prepaid balance triggers are obsolete. Reconfigure Caedral Trigger to use included pool usage percent.",
+      );
+    }
+
+    const pool: TriggerPool | null =
+      triggerCondition === "caedralPoolPercentAtOrAbove"
+        ? "caedral"
+        : triggerCondition === "externalPoolPercentAtOrAbove"
+          ? "external"
+          : null;
+
+    if (!pool) {
+      throw new NodeOperationError(
+        this.getNode(),
+        `Unknown trigger condition: ${triggerCondition}`,
+      );
+    }
+
+    const threshold = this.getNodeParameter("usagePercent") as number;
 
     let raw: unknown;
     try {
@@ -121,37 +153,26 @@ export class CaedralTrigger implements INodeType {
       );
     }
 
-    const response = responseBody as UsageResponse;
-
-    if (triggerCondition === "balanceBelow") {
-      const threshold = this.getNodeParameter("balanceThreshold") as number;
-      const usage = formatUsageForOutput(response);
-      const balance = usage.balanceCents;
-
-      if (balance < threshold) {
-        return [
-          [
-            {
-              json: {
-                triggered: true,
-                condition: "balanceBelow",
-                ...usage,
-                thresholdCents: threshold,
-                balanceFormatted: `$${(balance / 100).toFixed(2)}`,
-                thresholdFormatted: `$${(threshold / 100).toFixed(2)}`,
-                timestamp: new Date().toISOString(),
-              } as IDataObject,
-            },
-          ],
-        ];
-      }
-    } else {
-      throw new NodeOperationError(
-        this.getNode(),
-        `Unknown trigger condition: ${triggerCondition}`,
-      );
+    const usage = responseBody as UsageResponse;
+    const percentUsed = includedPoolPercentUsed(usage, pool);
+    if (percentUsed === null || percentUsed < threshold) {
+      return null;
     }
 
-    return null;
+    return [
+      [
+        {
+          json: {
+            triggered: true,
+            condition: triggerCondition,
+            pool,
+            percentUsed,
+            thresholdPercent: threshold,
+            usage,
+            timestamp: new Date().toISOString(),
+          } as IDataObject,
+        },
+      ],
+    ];
   }
 }

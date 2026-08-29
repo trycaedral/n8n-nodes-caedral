@@ -4,7 +4,7 @@ import {
   buildChatCompletionBody,
   buildRequestUrl,
   formatApiErrorMessage,
-  formatUsageForOutput,
+  includedPoolPercentUsed,
   inferResourceFromOperation,
   isValidChatMessageContent,
   normalizeBaseUrl,
@@ -134,14 +134,24 @@ describe("buildChatCompletionBody", () => {
         messageMode: "simple",
         message: "Hello",
         temperature: 0.2,
-        maxTokens: 128,
+        topP: 0.9,
       }),
     ).toEqual({
       model: "openai/gpt-5-mini",
       messages: [{ role: "user", content: "Hello" }],
       temperature: 0.2,
-      max_tokens: 128,
+      top_p: 0.9,
     });
+  });
+
+  it("omits max_tokens and max_completion_tokens", () => {
+    const body = buildChatCompletionBody({
+      model: "openai/gpt-5-mini",
+      messageMode: "simple",
+      message: "Hello",
+    });
+    expect(body).not.toHaveProperty("max_tokens");
+    expect(body).not.toHaveProperty("max_completion_tokens");
   });
 
   it("prepends system prompt in simple mode", () => {
@@ -194,14 +204,29 @@ describe("parseChatCompletionResponse", () => {
   });
 });
 
-describe("formatUsageForOutput", () => {
-  it("normalizes missing fields to prepaid shape", () => {
-    expect(formatUsageForOutput({})).toEqual({
-      accountStatus: "unknown",
-      balanceCents: 0,
-      balanceMilliCents: 0,
-      balanceWeightedUnitsAffordable: 0,
-    });
+describe("includedPoolPercentUsed", () => {
+  it("reads percentUsed from the current usage pools", () => {
+    expect(
+      includedPoolPercentUsed(
+        {
+          pools: {
+            caedral: { percentUsed: 81 },
+            external: { percentUsed: 10, available: true },
+          },
+        },
+        "caedral",
+      ),
+    ).toBe(81);
+    expect(
+      includedPoolPercentUsed(
+        {
+          pools: {
+            external: { percentUsed: 10, available: false },
+          },
+        },
+        "external",
+      ),
+    ).toBeNull();
   });
 });
 
@@ -211,11 +236,11 @@ describe("formatApiErrorMessage", () => {
       formatApiErrorMessage(402, {
         error: {
           type: "insufficient_balance",
-          message: "Insufficient prepaid balance",
+          message: "Included quota exhausted",
           code: 402,
         },
       }),
-    ).toBe("[insufficient_balance] Insufficient prepaid balance");
+    ).toBe("[insufficient_balance] Included quota exhausted");
   });
 
   it("falls back for plain text bodies", () => {

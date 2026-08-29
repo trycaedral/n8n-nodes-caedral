@@ -26,7 +26,6 @@ describe("CaedralLangChainChatModel", () => {
       apiKey: "test-key",
       model: "openai/gpt-5-mini",
       temperature: 0.7,
-      maxTokens: 1024,
       httpRequest: vi.fn(),
     });
 
@@ -69,7 +68,6 @@ describe("CaedralLangChainChatModel", () => {
       apiKey: "test-key",
       model: "openai/gpt-5-mini",
       temperature: 0.2,
-      maxTokens: 512,
       httpRequest,
     });
 
@@ -95,6 +93,8 @@ describe("CaedralLangChainChatModel", () => {
       },
     ]);
     expect(requestBody.tool_choice).toBe("auto");
+    expect(requestBody).not.toHaveProperty("max_tokens");
+    expect(requestBody).not.toHaveProperty("max_completion_tokens");
 
     expect(result.tool_calls).toEqual([
       {
@@ -132,7 +132,6 @@ describe("CaedralLangChainChatModel", () => {
       apiKey: "test-key",
       model: "openai/gpt-5-mini",
       temperature: 0.2,
-      maxTokens: 512,
       httpRequest,
     });
 
@@ -158,6 +157,8 @@ describe("CaedralLangChainChatModel", () => {
       },
     ]);
     expect(requestBody.tool_choice).toBe("auto");
+    expect(requestBody).not.toHaveProperty("max_tokens");
+    expect(requestBody).not.toHaveProperty("max_completion_tokens");
 
     const generation = result.generations[0];
     expect(generation.message.tool_calls).toEqual([

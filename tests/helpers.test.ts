@@ -42,7 +42,11 @@ describe("inferResourceFromOperation", () => {
     expect(inferResourceFromOperation("createEmbedding")).toBe("ai");
     expect(inferResourceFromOperation("rerank")).toBe("ai");
     expect(inferResourceFromOperation("audioGeneration")).toBe("audio");
+    expect(inferResourceFromOperation("audioTranscription")).toBe("audio");
     expect(inferResourceFromOperation("imageGeneration")).toBe("image");
+    expect(inferResourceFromOperation("videoGeneration")).toBe("video");
+    expect(inferResourceFromOperation("getVideoStatus")).toBe("video");
+    expect(inferResourceFromOperation("getVideoContent")).toBe("video");
     expect(inferResourceFromOperation("listModels")).toBe("models");
     expect(inferResourceFromOperation("getUsage")).toBe("account");
     expect(inferResourceFromOperation("getAccountInfo")).toBe("account");
@@ -113,12 +117,12 @@ describe("buildChatCompletionBody", () => {
   it("builds a minimal request body", () => {
     expect(
       buildChatCompletionBody({
-        model: "caedral-titan",
+        model: "openai/gpt-5-mini",
         messageMode: "simple",
         message: "Hello",
       }),
     ).toEqual({
-      model: "caedral-titan",
+      model: "openai/gpt-5-mini",
       messages: [{ role: "user", content: "Hello" }],
     });
   });
@@ -126,14 +130,14 @@ describe("buildChatCompletionBody", () => {
   it("includes optional parameters when provided", () => {
     expect(
       buildChatCompletionBody({
-        model: "caedral-base",
+        model: "openai/gpt-5-mini",
         messageMode: "simple",
         message: "Hello",
         temperature: 0.2,
         maxTokens: 128,
       }),
     ).toEqual({
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       messages: [{ role: "user", content: "Hello" }],
       temperature: 0.2,
       max_tokens: 128,
@@ -142,7 +146,7 @@ describe("buildChatCompletionBody", () => {
 
   it("prepends system prompt in simple mode", () => {
     const result = buildChatCompletionBody({
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       messageMode: "simple",
       message: "Hello",
       systemPrompt: "You are helpful.",
@@ -155,7 +159,7 @@ describe("buildChatCompletionBody", () => {
 
   it("does not add system prompt in json mode", () => {
     const result = buildChatCompletionBody({
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       messageMode: "json",
       messagesJson: [{ role: "user", content: "Hi" }],
       systemPrompt: "Ignored in JSON mode",
@@ -168,7 +172,7 @@ describe("parseChatCompletionResponse", () => {
   it("extracts assistant content and usage", () => {
     const parsed = parseChatCompletionResponse({
       id: "chatcmpl-1",
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       choices: [
         {
           index: 0,
@@ -184,7 +188,7 @@ describe("parseChatCompletionResponse", () => {
     });
 
     expect(parsed.content).toBe("Hello from Caedral");
-    expect(parsed.model).toBe("caedral-base");
+    expect(parsed.model).toBe("openai/gpt-5-mini");
     expect(parsed.finishReason).toBe("stop");
     expect(parsed.usage?.total_tokens).toBe(15);
   });

@@ -4,7 +4,7 @@ import type {
   ISupplyDataFunctions,
   SupplyData,
 } from "n8n-workflow";
-import { NodeApiError, NodeConnectionTypes } from "n8n-workflow";
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from "n8n-workflow";
 
 import { DEFAULT_TIMEOUT_MS } from "../../shared/constants";
 import { normalizeBaseUrl } from "../Caedral/helpers";
@@ -37,7 +37,7 @@ export class CaedralChatModel implements INodeType {
     group: ["transform"],
     subtitle: '={{$parameter["model"]}}',
     version: 1,
-    description: "Use Caedral chat tiers with AI Agent and Chain nodes (prepaid API balance)",
+    description: "Use Caedral chat-capable models with AI Agent and Chain nodes (prepaid API balance)",
     defaults: {
       name: "Caedral Chat Model",
     },
@@ -64,7 +64,8 @@ export class CaedralChatModel implements INodeType {
         name: "model",
         type: "options",
         typeOptions: { loadOptionsMethod: "getChatModels" },
-        default: "caedral-olympus",
+        default: "",
+        required: true,
         description:
           'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
       },
@@ -122,11 +123,18 @@ export class CaedralChatModel implements INodeType {
     const credentials = (await this.getCredentials("caedralApi")) as CaedralCredentials;
     const baseUrl = normalizeBaseUrl(credentials.baseUrl);
     const apiKey = credentials.apiKey;
+    const node = this.getNode();
     const model = this.getNodeParameter("model", itemIndex) as string;
+    if (!model?.trim()) {
+      throw new NodeOperationError(
+        node,
+        "Model is required. Choose a catalog chat model or set a model ID with an expression.",
+        { itemIndex },
+      );
+    }
     const temperature = this.getNodeParameter("temperature", itemIndex) as number;
     const maxTokens = this.getNodeParameter("maxTokens", itemIndex) as number;
     const options = this.getNodeParameter("options", itemIndex, {}) as ChatModelOptions;
-    const node = this.getNode();
 
     const chatModel = new CaedralLangChainChatModel({
       baseUrl,

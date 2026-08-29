@@ -2,20 +2,25 @@
 
 ## 2.0.0 — 2026-08-29
 
-Official n8n integration for the current Caedral production API.
+Official n8n integration for the current Caedral production API. Pre-publication validation found obsolete branded chat-tier fallbacks and incomplete modality coverage; those are corrected in this unpublished 2.0.0.
 
 ### Breaking
 
 - Removed the standalone **Caedral Reranker** AI sub-node. n8n community-node verification allows one regular node, one trigger, and two AI sub-nodes (chat model and embeddings). Rerank remains available as **Caedral → AI → Rerank**.
-- Audio voices now follow current Caedral Voice (Alloy, Ash, Ballad, Coral, Echo, Sage, Shimmer, Verse). TTS-1-only Fable / Nova / Onyx presets were removed from the dropdown; stored custom values can still be sent via Custom or an expression.
+- Removed obsolete production fallbacks `caedral-base`, `caedral-titan`, `caedral-olympus`, and `caedral-primordial`. Those IDs are not in the live catalog. Model dropdowns load only from `GET /v1/models` and filter by `recommended_endpoint.path`. Catalog failures no longer substitute dead IDs; enter a model ID with an expression instead.
+- Speech voices are loaded from each model's `supported_voices`. The old gpt-audio Alloy/Ash/… list is no longer a global default.
+- Embeddings no longer always send `dimensions: 384`. Set dimensions only when the selected model supports that parameter.
 
 ### Added
 
-- Resource selector on the main node: Account, AI, Audio, Image, Model
+- Resource selector on the main node: Account, AI, Audio, Image, Model, Video
 - `GET /v1/models/:id` as **Get Model**
-- Dynamic model lists from `GET /v1/models` (with static fallback)
+- Dynamic per-operation model lists from production `GET /v1/models`
 - Chat options: top_p, stop, penalties, tools JSON, response_format, user
-- Embedding `input_type` and `encoding_format` on the main node
+- Embedding `input_type`, `encoding_format`, and optional `dimensions`
+- Audio **Transcribe Audio** (`POST /v1/audio/transcriptions`)
+- Video **Generate Video** (async `POST /v1/videos`), **Get Video Status**, **Get Video Content**
+- Speech responses returned as n8n binary audio
 - Chat Model timeout and retry options
 - Prepaid `balanceMilliCents` on usage output
 - n8n-native `NodeOperationError` / `NodeApiError` handling for validation and HTTP 4xx/5xx
@@ -23,7 +28,7 @@ Official n8n integration for the current Caedral production API.
 
 ### Fixed
 
-- n8n review: operations grouped by resource; option lists alphabetized; no raw `Error` from execute/helpers; credentials and subtitles; `(Cents)` / `(Legacy Alias)` copy
+- n8n review: operations grouped by resource; option lists alphabetized; no raw `Error` from execute/helpers; credentials and subtitles; `(Cents)` copy
 - Usage payload aligned with the current gateway (no subscription plan/pool fields)
 
 ## 1.2.0 — 2026-08-04

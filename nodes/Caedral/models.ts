@@ -1,28 +1,24 @@
-import type {
-  ILoadOptionsFunctions,
-  INodePropertyOptions,
-} from "n8n-workflow";
+import type { ILoadOptionsFunctions, INodePropertyOptions } from "n8n-workflow";
+import { NodeOperationError } from "n8n-workflow";
 
+import { CATALOG_LOAD_ERROR, ENDPOINT_PATHS } from "../../shared/constants";
 import {
-  CHAT_MODEL_IDS,
-  EMBEDDING_MODEL_IDS,
-  FALLBACK_AUDIO_MODEL_OPTIONS,
-  FALLBACK_CHAT_MODEL_OPTIONS,
-  FALLBACK_EMBEDDING_MODEL_OPTIONS,
-  FALLBACK_IMAGE_MODEL_OPTIONS,
-  FALLBACK_RERANK_MODEL_OPTIONS,
-  RERANK_MODEL_ID,
-  VISION_MODEL_ID,
-  VOICE_MODEL_ID,
-} from "../../shared/constants";
-import { buildRequestUrl, normalizeBaseUrl, type CatalogModel } from "./helpers";
+  filterModelsByEndpoint,
+  findCatalogModel,
+  parseCatalogResponse,
+  type CatalogModel,
+} from "./catalog";
+import { buildRequestUrl, normalizeBaseUrl } from "./helpers";
 
 function optionName(model: CatalogModel, fallback: string): string {
   const label = model.name?.trim() || fallback;
   return model.id && model.id !== label ? `${label} (${model.id})` : label;
 }
 
-function toOptions(models: CatalogModel[], fallbackName: string): INodePropertyOptions[] {
+export function toModelOptions(
+  models: CatalogModel[],
+  fallbackName: string,
+): INodePropertyOptions[] {
   const options = models.map((model) => ({
     name: optionName(model, fallbackName),
     value: model.id,
@@ -32,23 +28,9 @@ function toOptions(models: CatalogModel[], fallbackName: string): INodePropertyO
   return options;
 }
 
-function mergeUnique(
-  preferred: INodePropertyOptions[],
-  extra: INodePropertyOptions[],
-): INodePropertyOptions[] {
-  const seen = new Set(preferred.map((option) => option.value));
-  const merged = [...preferred];
-  for (const option of extra) {
-    if (!seen.has(option.value)) {
-      merged.push(option);
-      seen.add(option.value);
-    }
-  }
-  merged.sort((a, b) => a.name.localeCompare(b.name));
-  return merged;
-}
-
-async function fetchCatalog(context: ILoadOptionsFunctions): Promise<CatalogModel[] | null> {
+async function fetchCatalogOrThrow(
+  context: ILoadOptionsFunctions,
+): Promise<CatalogModel[]> {
   try {
     const credentials = await context.getCredentials("caedralApi");
     const baseUrl = normalizeBaseUrl(
@@ -65,121 +47,95 @@ async function fetchCatalog(context: ILoadOptionsFunctions): Promise<CatalogMode
       },
     );
 
-    const body = (response as { data?: CatalogModel[]; body?: { data?: CatalogModel[] } });
-    const data = Array.isArray(body?.data)
-      ? body.data
-      : Array.isArray(body?.body?.data)
-        ? body.body.data
-        : null;
-
-    if (!data) return null;
-    return data.filter((model) => typeof model?.id === "string" && model.id.trim());
+    const models = parseCatalogResponse(response);
+    if (!models) {
+      throw new NodeOperationError(context.getNode(), CATALOG_LOAD_ERROR);
+    }
+    return models;
   } catch {
-    return null;
+    throw new NodeOperationError(context.getNode(), CATALOG_LOAD_ERROR);
   }
 }
 
-const CHAT_ID_SET = new Set<string>(CHAT_MODEL_IDS);
-
-function endpointPath(model: CatalogModel): string | undefined {
-  const path = model.recommended_endpoint?.path;
-  return typeof path === "string" && path.trim() ? path : undefined;
-}
-
-function isChatModel(model: CatalogModel): boolean {
-  const path = endpointPath(model);
-  if (path) return path.includes("/chat/completions");
-  if (CHAT_ID_SET.has(model.id)) return true;
-  if (model.pricing_tier === "specialized") return false;
-  return model.pricing_tier === "free" || model.pricing_tier === "paid";
-}
-
-function isEmbeddingModel(model: CatalogModel): boolean {
-  const path = endpointPath(model);
-  if (path) return path.includes("/embeddings");
-  return (
-    EMBEDDING_MODEL_IDS.includes(model.id as (typeof EMBEDDING_MODEL_IDS)[number]) ||
-    model.id.includes("embed")
-  );
-}
-
-function isRerankModel(model: CatalogModel): boolean {
-  const path = endpointPath(model);
-  if (path) return path.includes("/rerank");
-  return model.id === RERANK_MODEL_ID || model.id.includes("rerank");
-}
-
-function isImageModel(model: CatalogModel): boolean {
-  const path = endpointPath(model);
-  if (path) return path.includes("/images/generations");
-  return model.id === VISION_MODEL_ID || model.id.includes("vision");
-}
-
-function isAudioModel(model: CatalogModel): boolean {
-  const path = endpointPath(model);
-  if (path) return path.includes("/audio/speech");
-  return model.id === VOICE_MODEL_ID || model.id.includes("voice");
+async function optionsForEndpoint(
+  context: ILoadOptionsFunctions,
+  path: string,
+  fallbackName: string,
+): Promise<INodePropertyOptions[]> {
+  const catalog = await fetchCatalogOrThrow(context);
+  return toModelOptions(filterModelsByEndpoint(catalog, path), fallbackName);
 }
 
 export async function getChatModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalog(this);
-  if (!catalog) return [...FALLBACK_CHAT_MODEL_OPTIONS];
-  const fromApi = toOptions(catalog.filter(isChatModel), "Chat model");
-  return mergeUnique(fromApi, [...FALLBACK_CHAT_MODEL_OPTIONS]);
+  return optionsForEndpoint(this, ENDPOINT_PATHS.chatCompletions, "Chat model");
 }
 
 export async function getEmbeddingModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalog(this);
-  if (!catalog) return [...FALLBACK_EMBEDDING_MODEL_OPTIONS];
-  const fromApi = toOptions(catalog.filter(isEmbeddingModel), "Embedding model");
-  return mergeUnique(fromApi, [...FALLBACK_EMBEDDING_MODEL_OPTIONS]);
+  return optionsForEndpoint(this, ENDPOINT_PATHS.embeddings, "Embedding model");
 }
 
 export async function getRerankModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalog(this);
-  if (!catalog) return [...FALLBACK_RERANK_MODEL_OPTIONS];
-  const fromApi = toOptions(catalog.filter(isRerankModel), "Rerank model");
-  return mergeUnique(fromApi, [...FALLBACK_RERANK_MODEL_OPTIONS]);
+  return optionsForEndpoint(this, ENDPOINT_PATHS.rerank, "Rerank model");
 }
 
 export async function getImageModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalog(this);
-  if (!catalog) return [...FALLBACK_IMAGE_MODEL_OPTIONS];
-  const fromApi = toOptions(catalog.filter(isImageModel), "Image model");
-  return mergeUnique(fromApi, [...FALLBACK_IMAGE_MODEL_OPTIONS]);
+  return optionsForEndpoint(this, ENDPOINT_PATHS.imageGenerations, "Image model");
 }
 
-export async function getAudioModels(
+export async function getSpeechModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalog(this);
-  if (!catalog) return [...FALLBACK_AUDIO_MODEL_OPTIONS];
-  const fromApi = toOptions(catalog.filter(isAudioModel), "Audio model");
-  return mergeUnique(fromApi, [...FALLBACK_AUDIO_MODEL_OPTIONS]);
+  return optionsForEndpoint(this, ENDPOINT_PATHS.audioSpeech, "Speech model");
+}
+
+/** @deprecated Use getSpeechModels. Kept so older node versions that referenced getAudioModels still resolve. */
+export const getAudioModels = getSpeechModels;
+
+export async function getTranscriptionModels(
+  this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+  return optionsForEndpoint(this, ENDPOINT_PATHS.audioTranscriptions, "Transcription model");
+}
+
+export async function getVideoModels(
+  this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+  return optionsForEndpoint(this, ENDPOINT_PATHS.videos, "Video model");
 }
 
 export async function getCatalogModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalog(this);
-  if (!catalog) {
-    return mergeUnique(
-      [...FALLBACK_CHAT_MODEL_OPTIONS],
-      [
-        ...FALLBACK_EMBEDDING_MODEL_OPTIONS,
-        ...FALLBACK_RERANK_MODEL_OPTIONS,
-        ...FALLBACK_IMAGE_MODEL_OPTIONS,
-        ...FALLBACK_AUDIO_MODEL_OPTIONS,
-      ],
-    );
+  const catalog = await fetchCatalogOrThrow(this);
+  return toModelOptions(catalog, "Model");
+}
+
+export async function getSpeechVoices(
+  this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+  let modelId = "";
+  try {
+    modelId = String(this.getCurrentNodeParameter("audioModel") ?? "").trim();
+  } catch {
+    return [];
   }
-  return toOptions(catalog, "Model");
+  if (!modelId) return [];
+
+  const catalog = await fetchCatalogOrThrow(this);
+  const model = findCatalogModel(catalog, modelId);
+  const voices = model?.supported_voices;
+  if (!Array.isArray(voices) || voices.length === 0) return [];
+
+  return voices
+    .filter((voice): voice is string => typeof voice === "string" && voice.trim().length > 0)
+    .map((voice) => ({ name: voice, value: voice }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

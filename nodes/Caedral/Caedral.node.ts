@@ -5,13 +5,8 @@ import type {
   INodeType,
   INodeTypeDescription,
 } from "n8n-workflow";
-import { NodeApiError, NodeConnectionTypes, NodeOperationError } from "n8n-workflow";
+import { NodeApiError, NodeConnectionTypes, NodeOperationError, sleep } from "n8n-workflow";
 
-import {
-  EMBEDDING_DIMENSIONS,
-  VISION_MODEL_ID,
-  VOICE_MODEL_ID,
-} from "../../shared/constants";
 import {
   buildChatCompletionBody,
   formatUsageForOutput,
@@ -25,15 +20,18 @@ import {
   type UsageResponse,
 } from "./helpers";
 import {
-  getAudioModels,
   getCatalogModels,
   getChatModels,
   getEmbeddingModels,
   getImageModels,
   getRerankModels,
+  getSpeechModels,
+  getSpeechVoices,
+  getTranscriptionModels,
+  getVideoModels,
 } from "./models";
 import { caedralProperties } from "./properties";
-import { caedralRequest } from "./transport";
+import { caedralRequest, caedralRequestBinary } from "./transport";
 
 type CaedralCredentials = {
   baseUrl?: string;
@@ -48,6 +46,28 @@ type ChatOptions = {
   toolsJson?: string | unknown[];
   topP?: number;
   user?: string;
+};
+
+type ImageOptions = {
+  n?: number;
+  seed?: number;
+  size?: string;
+};
+
+type SpeechOptions = {
+  responseFormat?: string;
+  speed?: number;
+};
+
+type VideoOptions = {
+  aspectRatio?: string;
+  duration?: number;
+  generateAudio?: boolean;
+  pollIntervalMs?: number;
+  pollTimeoutMs?: number;
+  resolution?: string;
+  seed?: number;
+  size?: string;
 };
 
 function toExecutionError(
@@ -97,6 +117,38 @@ function parseStopSequences(raw?: string): string | string[] | undefined {
   return parts.length === 1 ? parts[0] : parts;
 }
 
+function requireModelId(
+  context: IExecuteFunctions,
+  value: unknown,
+  itemIndex: number,
+): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new NodeOperationError(
+      context.getNode(),
+      "Model is required. Choose a catalog model or set a model ID with an expression.",
+      { itemIndex },
+    );
+  }
+  return value.trim();
+}
+
+function videoJobId(payload: IDataObject): string | undefined {
+  const id = payload.id ?? payload.generation_id;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+function videoStatus(payload: IDataObject): string {
+  return typeof payload.status === "string" ? payload.status.toLowerCase() : "";
+}
+
+function isVideoTerminalSuccess(status: string): boolean {
+  return status === "completed" || status === "succeeded";
+}
+
+function isVideoTerminalFailure(status: string): boolean {
+  return status === "failed" || status === "cancelled" || status === "canceled" || status === "expired" || status === "error";
+}
+
 export class Caedral implements INodeType {
   description: INodeTypeDescription = {
     displayName: "Caedral",
@@ -109,7 +161,7 @@ export class Caedral implements INodeType {
     version: 2,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description:
-      "Call Caedral AI — chat (Base/Titan/Olympus/Primordial), vision, embed, voice, rerank, and account APIs. API usage bills from prepaid balance",
+      "Call Caedral AI — chat, embeddings, rerank, image, speech, transcription, video, models, and prepaid account APIs. API usage bills from prepaid balance",
     defaults: {
       name: "Caedral",
     },
@@ -131,8 +183,12 @@ export class Caedral implements INodeType {
       getEmbeddingModels,
       getRerankModels,
       getImageModels,
-      getAudioModels,
+      getSpeechModels,
+      getAudioModels: getSpeechModels,
+      getTranscriptionModels,
+      getVideoModels,
       getCatalogModels,
+      getSpeechVoices,
     },
   };
 
@@ -165,14 +221,11 @@ export class Caedral implements INodeType {
         }
 
         if (operation === "getModel") {
-          const modelId = this.getNodeParameter("modelId", itemIndex) as string;
-          if (!modelId?.trim()) {
-            throw new NodeOperationError(this.getNode(), "Model ID is required", { itemIndex });
-          }
+          const modelId = requireModelId(this, this.getNodeParameter("modelId", itemIndex), itemIndex);
           const response = await caedralRequest<IDataObject>(this, {
             baseUrl,
             method: "GET",
-            path: `/v1/models/${encodeURIComponent(modelId.trim())}`,
+            path: `/v1/models/${encodeURIComponent(modelId)}`,
             itemIndex,
           });
           returnData.push({
@@ -197,7 +250,7 @@ export class Caedral implements INodeType {
         }
 
         if (operation === "chatCompletion") {
-          const model = this.getNodeParameter("model", itemIndex) as string;
+          const model = requireModelId(this, this.getNodeParameter("model", itemIndex), itemIndex);
           const messageMode = this.getNodeParameter("messageMode", itemIndex, "simple") as
             | "simple"
             | "json";
@@ -266,20 +319,30 @@ export class Caedral implements INodeType {
 
         if (operation === "imageGeneration") {
           const prompt = this.getNodeParameter("imagePrompt", itemIndex) as string;
-          const size = this.getNodeParameter("imageSize", itemIndex, "1024x1024") as string;
-          const n = this.getNodeParameter("imageN", itemIndex, 1) as number;
-          const model = this.getNodeParameter("imageModel", itemIndex, VISION_MODEL_ID) as string;
+          const model = requireModelId(
+            this,
+            this.getNodeParameter("imageModel", itemIndex, ""),
+            itemIndex,
+          );
+          const imageOptions = this.getNodeParameter("imageOptions", itemIndex, {}) as ImageOptions;
+          const legacySize = this.getNodeParameter("imageSize", itemIndex, "") as string;
+          const legacyN = this.getNodeParameter("imageN", itemIndex, 0) as number;
 
           if (!prompt.trim()) {
             throw new NodeOperationError(this.getNode(), "Prompt is required", { itemIndex });
           }
 
           const body: Record<string, unknown> = {
-            model: model || VISION_MODEL_ID,
+            model,
             prompt: prompt.trim(),
-            size,
           };
-          if (n > 1) body.n = n;
+          const size = imageOptions.size?.trim() || (typeof legacySize === "string" ? legacySize.trim() : "");
+          if (size) body.size = size;
+          const n = typeof imageOptions.n === "number" ? imageOptions.n : legacyN;
+          if (typeof n === "number" && n > 1) body.n = n;
+          if (typeof imageOptions.seed === "number" && imageOptions.seed !== 0) {
+            body.seed = imageOptions.seed;
+          }
 
           const response = await caedralRequest<IDataObject>(this, {
             baseUrl,
@@ -298,11 +361,11 @@ export class Caedral implements INodeType {
 
         if (operation === "createEmbedding") {
           const inputRaw = this.getNodeParameter("embeddingInput", itemIndex) as string;
-          const model = this.getNodeParameter(
-            "embeddingModel",
+          const model = requireModelId(
+            this,
+            this.getNodeParameter("embeddingModel", itemIndex, ""),
             itemIndex,
-            "caedral-embed-e1-small-v1",
-          ) as string;
+          );
           const inputType = this.getNodeParameter(
             "embeddingInputType",
             itemIndex,
@@ -313,15 +376,18 @@ export class Caedral implements INodeType {
             itemIndex,
             "float",
           ) as string;
+          const dimensions = this.getNodeParameter("embeddingDimensions", itemIndex, 0) as number;
           const input = parseEmbeddingInput(inputRaw, itemIndex);
 
           const body: Record<string, unknown> = {
             model,
-            dimensions: EMBEDDING_DIMENSIONS,
             input,
             input_type: inputType,
             encoding_format: encodingFormat,
           };
+          if (typeof dimensions === "number" && dimensions > 0) {
+            body.dimensions = dimensions;
+          }
 
           const response = await caedralRequest<IDataObject>(this, {
             baseUrl,
@@ -340,30 +406,110 @@ export class Caedral implements INodeType {
 
         if (operation === "audioGeneration") {
           const inputText = this.getNodeParameter("audioInput", itemIndex) as string;
-          const voiceChoice = this.getNodeParameter("audioVoice", itemIndex, "alloy") as string;
-          const customVoice = this.getNodeParameter("audioVoiceCustom", itemIndex, "") as string;
-          const model = this.getNodeParameter("audioModel", itemIndex, VOICE_MODEL_ID) as string;
-          const voice =
-            voiceChoice === "custom" ? customVoice.trim() || "alloy" : voiceChoice;
+          const model = requireModelId(
+            this,
+            this.getNodeParameter("audioModel", itemIndex, ""),
+            itemIndex,
+          );
+          const voiceChoice = (this.getNodeParameter("audioVoice", itemIndex, "") as string).trim();
+          const customVoice = (this.getNodeParameter("audioVoiceCustom", itemIndex, "") as string).trim();
+          const voice = voiceChoice === "custom" ? customVoice : voiceChoice;
+          const speechOptions = this.getNodeParameter("speechOptions", itemIndex, {}) as SpeechOptions;
 
           if (!inputText.trim()) {
             throw new NodeOperationError(this.getNode(), "Input text is required", { itemIndex });
           }
 
           const body: Record<string, unknown> = {
-            model: model || VOICE_MODEL_ID,
+            model,
             input: inputText.trim(),
-            voice,
           };
+          if (voice) body.voice = voice;
+          if (speechOptions.responseFormat?.trim()) {
+            body.response_format = speechOptions.responseFormat.trim();
+          }
+          if (typeof speechOptions.speed === "number" && speechOptions.speed !== 1) {
+            body.speed = speechOptions.speed;
+          }
 
-          const response = await caedralRequest<IDataObject>(this, {
+          const audio = await caedralRequestBinary(this, {
             baseUrl,
             method: "POST",
             path: "/v1/audio/speech",
             body,
             itemIndex,
+            fallbackMimeType: "audio/wav",
+            fallbackFileName: "speech.wav",
           });
 
+          const binary = await this.helpers.prepareBinaryData(
+            audio.buffer,
+            audio.fileName,
+            audio.mimeType,
+          );
+          returnData.push({
+            json: { model, voice: voice || null, mimeType: audio.mimeType } as IDataObject,
+            binary: { data: binary },
+            pairedItem: { item: itemIndex },
+          });
+          continue;
+        }
+
+        if (operation === "audioTranscription") {
+          const model = requireModelId(
+            this,
+            this.getNodeParameter("transcriptionModel", itemIndex, ""),
+            itemIndex,
+          );
+          const source = this.getNodeParameter(
+            "transcriptionSource",
+            itemIndex,
+            "binary",
+          ) as "binary" | "url";
+
+          if (source === "url") {
+            const fileUrl = (this.getNodeParameter("transcriptionUrl", itemIndex, "") as string).trim();
+            if (!fileUrl) {
+              throw new NodeOperationError(this.getNode(), "Audio URL is required", { itemIndex });
+            }
+            const response = await caedralRequest<IDataObject>(this, {
+              baseUrl,
+              method: "POST",
+              path: "/v1/audio/transcriptions",
+              body: { model, file: fileUrl },
+              itemIndex,
+            });
+            returnData.push({
+              json: response,
+              pairedItem: { item: itemIndex },
+            });
+            continue;
+          }
+
+          const binaryPropertyName = this.getNodeParameter(
+            "transcriptionBinaryProperty",
+            itemIndex,
+            "data",
+          ) as string;
+          const binaryMeta = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
+          const fileBuffer = await this.helpers.getBinaryDataBuffer(itemIndex, binaryPropertyName);
+          const form = new FormData();
+          form.append("model", model);
+          form.append(
+            "file",
+            new Blob([fileBuffer], {
+              type: binaryMeta.mimeType || "application/octet-stream",
+            }),
+            binaryMeta.fileName || "audio",
+          );
+
+          const response = await caedralRequest<IDataObject>(this, {
+            baseUrl,
+            method: "POST",
+            path: "/v1/audio/transcriptions",
+            body: form,
+            itemIndex,
+          });
           returnData.push({
             json: response,
             pairedItem: { item: itemIndex },
@@ -372,7 +518,11 @@ export class Caedral implements INodeType {
         }
 
         if (operation === "rerank") {
-          const model = this.getNodeParameter("rerankModel", itemIndex, "caedral-rerank") as string;
+          const model = requireModelId(
+            this,
+            this.getNodeParameter("rerankModel", itemIndex, ""),
+            itemIndex,
+          );
           const query = this.getNodeParameter("rerankQuery", itemIndex) as string;
           const docsRaw = this.getNodeParameter("rerankDocuments", itemIndex);
           const topN = this.getNodeParameter("rerankTopN", itemIndex, 5) as number;
@@ -417,6 +567,142 @@ export class Caedral implements INodeType {
                 relevance_score: result.relevance_score,
               })),
             } as IDataObject,
+            pairedItem: { item: itemIndex },
+          });
+          continue;
+        }
+
+        if (operation === "videoGeneration") {
+          const model = requireModelId(
+            this,
+            this.getNodeParameter("videoModel", itemIndex, ""),
+            itemIndex,
+          );
+          const prompt = this.getNodeParameter("videoPrompt", itemIndex) as string;
+          const waitForCompletion = this.getNodeParameter(
+            "videoWaitForCompletion",
+            itemIndex,
+            false,
+          ) as boolean;
+          const videoOptions = this.getNodeParameter("videoOptions", itemIndex, {}) as VideoOptions;
+
+          if (!prompt.trim()) {
+            throw new NodeOperationError(this.getNode(), "Prompt is required", { itemIndex });
+          }
+
+          const body: Record<string, unknown> = {
+            model,
+            prompt: prompt.trim(),
+          };
+          if (videoOptions.aspectRatio?.trim()) body.aspect_ratio = videoOptions.aspectRatio.trim();
+          if (typeof videoOptions.duration === "number" && videoOptions.duration > 0) {
+            body.duration = videoOptions.duration;
+          }
+          if (typeof videoOptions.generateAudio === "boolean") {
+            body.generate_audio = videoOptions.generateAudio;
+          }
+          if (videoOptions.resolution?.trim()) body.resolution = videoOptions.resolution.trim();
+          if (typeof videoOptions.seed === "number" && videoOptions.seed !== 0) {
+            body.seed = videoOptions.seed;
+          }
+          if (videoOptions.size?.trim()) body.size = videoOptions.size.trim();
+
+          let job = await caedralRequest<IDataObject>(this, {
+            baseUrl,
+            method: "POST",
+            path: "/v1/videos",
+            body,
+            itemIndex,
+          });
+
+          if (waitForCompletion) {
+            const id = videoJobId(job);
+            if (!id) {
+              throw new NodeOperationError(
+                this.getNode(),
+                "Video job did not return an id to poll",
+                { itemIndex },
+              );
+            }
+            const interval = videoOptions.pollIntervalMs && videoOptions.pollIntervalMs > 0
+              ? videoOptions.pollIntervalMs
+              : 2000;
+            const timeout = videoOptions.pollTimeoutMs && videoOptions.pollTimeoutMs > 0
+              ? videoOptions.pollTimeoutMs
+              : 300000;
+            const deadline = Date.now() + timeout;
+
+            while (!isVideoTerminalSuccess(videoStatus(job))) {
+              if (isVideoTerminalFailure(videoStatus(job))) {
+                throw new NodeOperationError(
+                  this.getNode(),
+                  `Video job ${id} ended with status ${videoStatus(job) || "unknown"}`,
+                  { itemIndex },
+                );
+              }
+              if (Date.now() >= deadline) {
+                throw new NodeOperationError(
+                  this.getNode(),
+                  `Timed out waiting for video job ${id}`,
+                  { itemIndex },
+                );
+              }
+              await sleep(interval);
+              job = await caedralRequest<IDataObject>(this, {
+                baseUrl,
+                method: "GET",
+                path: `/v1/videos/${encodeURIComponent(id)}`,
+                itemIndex,
+              });
+            }
+          }
+
+          returnData.push({
+            json: job,
+            pairedItem: { item: itemIndex },
+          });
+          continue;
+        }
+
+        if (operation === "getVideoStatus") {
+          const id = (this.getNodeParameter("videoId", itemIndex) as string).trim();
+          if (!id) {
+            throw new NodeOperationError(this.getNode(), "Video ID is required", { itemIndex });
+          }
+          const response = await caedralRequest<IDataObject>(this, {
+            baseUrl,
+            method: "GET",
+            path: `/v1/videos/${encodeURIComponent(id)}`,
+            itemIndex,
+          });
+          returnData.push({
+            json: response,
+            pairedItem: { item: itemIndex },
+          });
+          continue;
+        }
+
+        if (operation === "getVideoContent") {
+          const id = (this.getNodeParameter("videoId", itemIndex) as string).trim();
+          if (!id) {
+            throw new NodeOperationError(this.getNode(), "Video ID is required", { itemIndex });
+          }
+          const video = await caedralRequestBinary(this, {
+            baseUrl,
+            method: "GET",
+            path: `/v1/videos/${encodeURIComponent(id)}/content`,
+            itemIndex,
+            fallbackMimeType: "video/mp4",
+            fallbackFileName: `${id}.mp4`,
+          });
+          const binary = await this.helpers.prepareBinaryData(
+            video.buffer,
+            video.fileName,
+            video.mimeType,
+          );
+          returnData.push({
+            json: { id, mimeType: video.mimeType } as IDataObject,
+            binary: { data: binary },
             pairedItem: { item: itemIndex },
           });
           continue;

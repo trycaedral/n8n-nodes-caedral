@@ -6,7 +6,7 @@ import { Caedral } from "../nodes/Caedral/Caedral.node";
 
 const CHAT_RESPONSE = {
   id: "chatcmpl-test",
-  model: "caedral-base",
+  model: "openai/gpt-5-mini",
   choices: [
     {
       index: 0,
@@ -19,8 +19,8 @@ const CHAT_RESPONSE = {
 
 function createContext(
   visibleParams: Record<string, unknown>,
-  httpImpl?: () => Promise<{ statusCode: number; body: unknown }>,
-  extras?: { continueOnFail?: boolean },
+  httpImpl?: () => Promise<{ statusCode: number; body: unknown; headers?: Record<string, string> }>,
+  extras?: { continueOnFail?: boolean; binary?: Record<string, { data: string; mimeType: string; fileName: string }> },
 ) {
   const httpRequestWithAuthentication = vi.fn(
     async () =>
@@ -30,7 +30,7 @@ function createContext(
   );
 
   const context = {
-    getInputData: () => [{ json: {} }],
+    getInputData: () => [{ json: {}, binary: extras?.binary }],
     getCredentials: async () => ({
       apiKey: "cd_live_test",
       baseUrl: "http://localhost:5001",
@@ -49,7 +49,20 @@ function createContext(
       parameters: visibleParams,
     }),
     continueOnFail: () => extras?.continueOnFail ?? false,
-    helpers: { httpRequestWithAuthentication },
+    helpers: {
+      httpRequestWithAuthentication,
+      prepareBinaryData: async (buffer: Buffer, fileName?: string, mimeType?: string) => ({
+        data: Buffer.from(buffer).toString("base64"),
+        fileName,
+        mimeType,
+      }),
+      assertBinaryData: (_itemIndex: number, propertyName: string) => {
+        const binary = extras?.binary?.[propertyName];
+        if (!binary) throw new Error(`Missing binary property ${propertyName}`);
+        return binary;
+      },
+      getBinaryDataBuffer: async () => Buffer.from("fake-audio"),
+    },
   } as unknown as IExecuteFunctions;
 
   return { context, httpRequestWithAuthentication };
@@ -59,7 +72,7 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
   it("Simple mode works without messagesJson stored (hidden by displayOptions)", async () => {
     const { context, httpRequestWithAuthentication } = createContext({
       operation: "chatCompletion",
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       messageMode: "simple",
       message: "Hello!",
       temperature: 1,
@@ -86,7 +99,7 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
   it("JSON mode works without message/systemPrompt stored (hidden by displayOptions)", async () => {
     const { context, httpRequestWithAuthentication } = createContext({
       operation: "chatCompletion",
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       messageMode: "json",
       messagesJson: '[{"role":"user","content":"From JSON"}]',
       temperature: 1,
@@ -107,7 +120,7 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
   it("runs a v1 workflow that omits resource", async () => {
     const { context } = createContext({
       operation: "chatCompletion",
-      model: "caedral-base",
+      model: "openai/gpt-5-mini",
       messageMode: "simple",
       message: "Hello!",
       temperature: 1,
@@ -119,6 +132,24 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
     const result = await node.execute.call(context);
     expect(result[0]?.[0]?.json.content).toBe("Hi there!");
   });
+
+  it("accepts a manually supplied model ID", async () => {
+    const { context, httpRequestWithAuthentication } = createContext({
+      operation: "chatCompletion",
+      model: "my-org/custom-chat",
+      messageMode: "simple",
+      message: "Hello!",
+      temperature: 1,
+      maxTokens: 0,
+      systemPrompt: "",
+    });
+
+    const node = new Caedral();
+    await node.execute.call(context);
+    expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
+      body: { model: "my-org/custom-chat" },
+    });
+  });
 });
 
 describe("Caedral node — resource operations", () => {
@@ -127,7 +158,7 @@ describe("Caedral node — resource operations", () => {
       { resource: "models", operation: "listModels" },
       async () => ({
         statusCode: 200,
-        body: { object: "list", data: [{ id: "caedral-base" }] },
+        body: { object: "list", data: [{ id: "openai/gpt-5-mini" }] },
       }),
     );
 
@@ -137,7 +168,7 @@ describe("Caedral node — resource operations", () => {
       url: "http://localhost:5001/v1/models",
       method: "GET",
     });
-    expect(result[0]?.[0]?.json.models).toEqual([{ id: "caedral-base" }]);
+    expect(result[0]?.[0]?.json.models).toEqual([{ id: "openai/gpt-5-mini" }]);
   });
 
   it("gets usage without resource (legacy)", async () => {
@@ -163,16 +194,17 @@ describe("Caedral node — resource operations", () => {
     });
   });
 
-  it("creates embeddings", async () => {
+  it("creates embeddings without a hardcoded dimension", async () => {
     const { context, httpRequestWithAuthentication } = createContext(
       {
         resource: "ai",
         operation: "createEmbedding",
+        embeddingModel: "caedral-embed-e1-small-v1",
         embeddingInput: "hello",
       },
       async () => ({
         statusCode: 200,
-        body: { model: "caedral-embed", data: [{ embedding: [0.1], index: 0 }] },
+        body: { model: "caedral-embed-e1-small-v1", data: [{ embedding: [0.1], index: 0 }] },
       }),
     );
 
@@ -182,11 +214,36 @@ describe("Caedral node — resource operations", () => {
       url: "http://localhost:5001/v1/embeddings",
       body: {
         model: "caedral-embed-e1-small-v1",
-        dimensions: 384,
         input: "hello",
         input_type: "document",
         encoding_format: "float",
       },
+    });
+    expect(
+      (httpRequestWithAuthentication.mock.calls[0]?.[1] as { body: Record<string, unknown> }).body
+        .dimensions,
+    ).toBeUndefined();
+  });
+
+  it("sends embedding dimensions only when the user sets them", async () => {
+    const { context, httpRequestWithAuthentication } = createContext(
+      {
+        resource: "ai",
+        operation: "createEmbedding",
+        embeddingModel: "caedral-embed-e1-small-v1",
+        embeddingInput: "hello",
+        embeddingDimensions: 384,
+      },
+      async () => ({
+        statusCode: 200,
+        body: { model: "caedral-embed-e1-small-v1", data: [{ embedding: [0.1], index: 0 }] },
+      }),
+    );
+
+    const node = new Caedral();
+    await node.execute.call(context);
+    expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
+      body: { dimensions: 384 },
     });
   });
 
@@ -195,6 +252,7 @@ describe("Caedral node — resource operations", () => {
       {
         resource: "ai",
         operation: "rerank",
+        rerankModel: "BAAI/bge-reranker-v2-m3",
         rerankQuery: "capital",
         rerankDocuments: '["Paris is the capital of France.","Berlin is in Germany."]',
         rerankTopN: 2,
@@ -203,7 +261,7 @@ describe("Caedral node — resource operations", () => {
       async () => ({
         statusCode: 200,
         body: {
-          model: "caedral-rerank",
+          model: "BAAI/bge-reranker-v2-m3",
           results: [
             { index: 0, relevance_score: 0.9 },
             { index: 1, relevance_score: 0.1 },
@@ -224,6 +282,7 @@ describe("Caedral node — resource operations", () => {
     const { context } = createContext({
       resource: "ai",
       operation: "rerank",
+      rerankModel: "BAAI/bge-reranker-v2-m3",
       rerankQuery: "capital",
       rerankDocuments: "{not-json}",
       rerankTopN: 2,
@@ -264,7 +323,7 @@ describe("Caedral node — resource operations", () => {
     const { context } = createContext(
       {
         operation: "chatCompletion",
-        model: "caedral-base",
+        model: "openai/gpt-5-mini",
         messageMode: "simple",
         message: "Hello",
         temperature: 1,
@@ -305,37 +364,44 @@ describe("Caedral node — resource operations", () => {
     expect(result[0]?.[0]?.json.httpCode).toBe("402");
   });
 
-  it("generates audio with the selected voice", async () => {
+  it("generates speech as binary audio", async () => {
     const { context, httpRequestWithAuthentication } = createContext(
       {
         resource: "audio",
         operation: "audioGeneration",
+        audioModel: "caedral-voice-1",
         audioInput: "Hello from Caedral",
-        audioVoice: "coral",
+        audioVoice: "caedral-f1",
       },
-      async () => ({ statusCode: 200, body: { model: "caedral-voice", choices: [] } }),
+      async () => ({
+        statusCode: 200,
+        body: Buffer.from("RIFF"),
+        headers: { "content-type": "audio/wav" },
+      }),
     );
 
     const node = new Caedral();
-    await node.execute.call(context);
+    const result = await node.execute.call(context);
     expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
       url: "http://localhost:5001/v1/audio/speech",
-      body: { model: "caedral-voice", input: "Hello from Caedral", voice: "coral" },
+      encoding: "arraybuffer",
+      body: { model: "caedral-voice-1", input: "Hello from Caedral", voice: "caedral-f1" },
     });
+    expect(result[0]?.[0]?.binary?.data.mimeType).toBe("audio/wav");
   });
 
-  it("generates an image", async () => {
+  it("generates an image with a live catalog model ID", async () => {
     const { context, httpRequestWithAuthentication } = createContext(
       {
         resource: "image",
         operation: "imageGeneration",
+        imageModel: "black-forest-labs/flux.2-flex",
         imagePrompt: "A red circle",
-        imageSize: "1024x1024",
-        imageN: 1,
+        imageOptions: { size: "1024x1024" },
       },
       async () => ({
         statusCode: 200,
-        body: { model: "caedral-vision", data: [{ url: "https://example.com/x.png" }] },
+        body: { data: [{ url: "https://example.com/x.png" }] },
       }),
     );
 
@@ -343,8 +409,125 @@ describe("Caedral node — resource operations", () => {
     const result = await node.execute.call(context);
     expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
       url: "http://localhost:5001/v1/images/generations",
-      body: { model: "caedral-vision", prompt: "A red circle", size: "1024x1024" },
+      body: { model: "black-forest-labs/flux.2-flex", prompt: "A red circle", size: "1024x1024" },
     });
     expect(result[0]?.[0]?.json.data).toHaveLength(1);
+  });
+
+  it("keeps v1 imageSize on generate image", async () => {
+    const { context, httpRequestWithAuthentication } = createContext(
+      {
+        operation: "imageGeneration",
+        imageModel: "black-forest-labs/flux.2-flex",
+        imagePrompt: "A red circle",
+        imageSize: "1024x1024",
+        imageN: 1,
+      },
+      async () => ({
+        statusCode: 200,
+        body: { data: [{ url: "https://example.com/x.png" }] },
+      }),
+    );
+
+    const node = new Caedral();
+    await node.execute.call(context);
+    expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
+      body: { prompt: "A red circle", size: "1024x1024" },
+    });
+  });
+
+  it("transcribes binary audio via multipart", async () => {
+    const { context, httpRequestWithAuthentication } = createContext(
+      {
+        resource: "audio",
+        operation: "audioTranscription",
+        transcriptionModel: "deepgram/nova-3",
+        transcriptionSource: "binary",
+        transcriptionBinaryProperty: "data",
+      },
+      async () => ({
+        statusCode: 200,
+        body: { text: "hello world" },
+      }),
+      {
+        binary: {
+          data: { data: Buffer.from("fake-audio").toString("base64"), mimeType: "audio/wav", fileName: "clip.wav" },
+        },
+      },
+    );
+
+    const node = new Caedral();
+    const result = await node.execute.call(context);
+    const request = httpRequestWithAuthentication.mock.calls[0]?.[1] as { body: FormData; url: string };
+    expect(request.url).toBe("http://localhost:5001/v1/audio/transcriptions");
+    expect(request.body).toBeInstanceOf(FormData);
+    expect(result[0]?.[0]?.json.text).toBe("hello world");
+  });
+
+  it("starts an async video job and does not pretend it is synchronous", async () => {
+    const { context, httpRequestWithAuthentication } = createContext(
+      {
+        resource: "video",
+        operation: "videoGeneration",
+        videoModel: "alibaba/wan-2.6",
+        videoPrompt: "A paper boat in the rain",
+        videoWaitForCompletion: false,
+      },
+      async () => ({
+        statusCode: 200,
+        body: { id: "job-abc", status: "pending" },
+      }),
+    );
+
+    const node = new Caedral();
+    const result = await node.execute.call(context);
+    expect(httpRequestWithAuthentication).toHaveBeenCalledTimes(1);
+    expect(httpRequestWithAuthentication.mock.calls[0]?.[1]).toMatchObject({
+      url: "http://localhost:5001/v1/videos",
+      body: { model: "alibaba/wan-2.6", prompt: "A paper boat in the rain" },
+    });
+    expect(result[0]?.[0]?.json).toMatchObject({ id: "job-abc", status: "pending" });
+  });
+
+  it("polls video status until completion when asked", async () => {
+    const { context, httpRequestWithAuthentication } = createContext(
+      {
+        resource: "video",
+        operation: "videoGeneration",
+        videoModel: "alibaba/wan-2.6",
+        videoPrompt: "A paper boat in the rain",
+        videoWaitForCompletion: true,
+        videoOptions: { pollIntervalMs: 1, pollTimeoutMs: 5000 },
+      },
+    );
+    httpRequestWithAuthentication
+      .mockResolvedValueOnce({ statusCode: 200, body: { id: "job-abc", status: "pending" } })
+      .mockResolvedValueOnce({ statusCode: 200, body: { id: "job-abc", status: "completed" } });
+
+    const node = new Caedral();
+    const result = await node.execute.call(context);
+    expect(httpRequestWithAuthentication).toHaveBeenCalledTimes(2);
+    expect(httpRequestWithAuthentication.mock.calls[1]?.[1]).toMatchObject({
+      method: "GET",
+      url: "http://localhost:5001/v1/videos/job-abc",
+    });
+    expect(result[0]?.[0]?.json.status).toBe("completed");
+  });
+
+  it("requires a model ID instead of substituting an obsolete branded fallback", async () => {
+    const { context } = createContext({
+      resource: "ai",
+      operation: "chatCompletion",
+      model: "",
+      messageMode: "simple",
+      message: "Hello",
+      temperature: 1,
+      maxTokens: 0,
+      systemPrompt: "",
+    });
+
+    const node = new Caedral();
+    await expect(node.execute.call(context)).rejects.toBeInstanceOf(NodeOperationError);
+    await expect(node.execute.call(context)).rejects.toThrow(/Model is required/);
   });
 });

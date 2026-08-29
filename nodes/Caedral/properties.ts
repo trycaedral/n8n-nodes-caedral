@@ -1,16 +1,11 @@
 import type { INodeProperties } from "n8n-workflow";
 
-import {
-  VISION_MODEL_ID,
-  VOICE_MODEL_ID,
-  VOICE_OPTIONS,
-} from "../../shared/constants";
-
 const AI = { show: { resource: ["ai"] } };
 const AUDIO = { show: { resource: ["audio"] } };
 const IMAGE = { show: { resource: ["image"] } };
 const MODELS = { show: { resource: ["models"] } };
 const ACCOUNT = { show: { resource: ["account"] } };
+const VIDEO = { show: { resource: ["video"] } };
 
 export const caedralProperties: INodeProperties[] = [
   {
@@ -23,9 +18,32 @@ export const caedralProperties: INodeProperties[] = [
       { name: "AI", value: "ai" },
       { name: "Audio", value: "audio" },
       { name: "Image", value: "image" },
-      { name: 'Model', value: "models" },
+      { name: "Model", value: "models" },
+      { name: "Video", value: "video" },
     ],
     default: "ai",
+  },
+  {
+    displayName: "Operation",
+    name: "operation",
+    type: "options",
+    noDataExpression: true,
+    displayOptions: ACCOUNT,
+    options: [
+      {
+        name: "Get Account Info",
+        value: "getAccountInfo",
+        description: "Get prepaid balance and account status",
+        action: "Get account info",
+      },
+      {
+        name: "Get Usage",
+        value: "getUsage",
+        description: "Get prepaid balance and account status (same as Get Account Info)",
+        action: "Get usage",
+      },
+    ],
+    default: "getAccountInfo",
   },
   {
     displayName: "Operation",
@@ -37,7 +55,7 @@ export const caedralProperties: INodeProperties[] = [
       {
         name: "Chat Completion",
         value: "chatCompletion",
-        description: "Send a chat completion request to a Caedral chat model",
+        description: "Send a chat completion request to a chat-capable Caedral model",
         action: "Send a chat completion",
       },
       {
@@ -63,10 +81,16 @@ export const caedralProperties: INodeProperties[] = [
     displayOptions: AUDIO,
     options: [
       {
-        name: "Generate Audio",
+        name: "Generate Speech",
         value: "audioGeneration",
         description: "Generate speech audio from text",
-        action: "Generate audio",
+        action: "Generate speech",
+      },
+      {
+        name: "Transcribe Audio",
+        value: "audioTranscription",
+        description: "Transcribe audio into text",
+        action: "Transcribe audio",
       },
     ],
     default: "audioGeneration",
@@ -114,22 +138,28 @@ export const caedralProperties: INodeProperties[] = [
     name: "operation",
     type: "options",
     noDataExpression: true,
-    displayOptions: ACCOUNT,
+    displayOptions: VIDEO,
     options: [
       {
-        name: "Get Account Info",
-        value: "getAccountInfo",
-        description: "Get prepaid balance and account status",
-        action: "Get account info",
+        name: "Generate Video",
+        value: "videoGeneration",
+        description: "Start an asynchronous video generation job",
+        action: "Generate a video",
       },
       {
-        name: "Get Usage",
-        value: "getUsage",
-        description: "Get prepaid balance and account status (same as Get Account Info)",
-        action: "Get usage",
+        name: "Get Video Content",
+        value: "getVideoContent",
+        description: "Download generated video bytes for a completed job",
+        action: "Get video content",
+      },
+      {
+        name: "Get Video Status",
+        value: "getVideoStatus",
+        description: "Poll an asynchronous video generation job",
+        action: "Get video status",
       },
     ],
-    default: "getAccountInfo",
+    default: "videoGeneration",
   },
 
   // --- Chat Completion ---
@@ -139,7 +169,8 @@ export const caedralProperties: INodeProperties[] = [
     type: "options",
     typeOptions: { loadOptionsMethod: "getChatModels" },
     displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
-    default: "caedral-base",
+    default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },
@@ -195,7 +226,7 @@ export const caedralProperties: INodeProperties[] = [
     typeOptions: { minValue: 0, maxValue: 2, numberStepSize: 0.1 },
     displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
     default: 1,
-    description: 'Sampling temperature (0–2). The default 1 is omitted from the request.',
+    description: "Sampling temperature (0–2). The default 1 is omitted from the request.",
   },
   {
     displayName: "Max Tokens",
@@ -204,7 +235,7 @@ export const caedralProperties: INodeProperties[] = [
     typeOptions: { minValue: 1 },
     displayOptions: { show: { resource: ["ai"], operation: ["chatCompletion"] } },
     default: 0,
-    description: 'Maximum tokens to generate. Set to 0 to omit from the request.',
+    description: "Maximum tokens to generate. Set to 0 to omit from the request.",
   },
   {
     displayName: "Options",
@@ -220,7 +251,7 @@ export const caedralProperties: INodeProperties[] = [
         type: "number",
         typeOptions: { minValue: -2, maxValue: 2, numberStepSize: 0.1 },
         default: 0,
-        description: 'Frequency penalty (-2 to 2). Omitted when 0.',
+        description: "Frequency penalty (-2 to 2). Omitted when 0.",
       },
       {
         displayName: "Presence Penalty",
@@ -228,7 +259,7 @@ export const caedralProperties: INodeProperties[] = [
         type: "number",
         typeOptions: { minValue: -2, maxValue: 2, numberStepSize: 0.1 },
         default: 0,
-        description: 'Presence penalty (-2 to 2). Omitted when 0.',
+        description: "Presence penalty (-2 to 2). Omitted when 0.",
       },
       {
         displayName: "Response Format",
@@ -275,7 +306,7 @@ export const caedralProperties: INodeProperties[] = [
         type: "number",
         typeOptions: { minValue: 0, maxValue: 1, numberStepSize: 0.05 },
         default: 0,
-        description: 'Nucleus sampling. Set to 0 to omit from the request.',
+        description: "Nucleus sampling. Set to 0 to omit from the request.",
       },
       {
         displayName: "User",
@@ -294,7 +325,8 @@ export const caedralProperties: INodeProperties[] = [
     type: "options",
     typeOptions: { loadOptionsMethod: "getEmbeddingModels" },
     displayOptions: { show: { resource: ["ai"], operation: ["createEmbedding"] } },
-    default: "caedral-embed-e1-small-v1",
+    default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },
@@ -307,19 +339,7 @@ export const caedralProperties: INodeProperties[] = [
     default: "",
     required: true,
     placeholder: "The quick brown fox jumps over the lazy dog",
-    description: 'Text to embed. For a batch, provide a JSON array of strings.',
-  },
-  {
-    displayName: "Input Type",
-    name: "embeddingInputType",
-    type: "options",
-    displayOptions: { show: { resource: ["ai"], operation: ["createEmbedding"] } },
-    options: [
-      { name: "Document", value: "document" },
-      { name: "Query", value: "query" },
-    ],
-    default: "document",
-    description: "Retrieval-aware prefixing sent as input_type",
+    description: "Text to embed. For a batch, provide a JSON array of strings.",
   },
   {
     displayName: "Encoding Format",
@@ -333,6 +353,28 @@ export const caedralProperties: INodeProperties[] = [
     default: "float",
     description: "Response encoding from POST /v1/embeddings",
   },
+  {
+    displayName: "Input Type",
+    name: "embeddingInputType",
+    type: "options",
+    displayOptions: { show: { resource: ["ai"], operation: ["createEmbedding"] } },
+    options: [
+      { name: "Document", value: "document" },
+      { name: "Query", value: "query" },
+    ],
+    default: "document",
+    description: "Retrieval-aware prefixing sent as input_type when the model supports it",
+  },
+  {
+    displayName: "Dimensions",
+    name: "embeddingDimensions",
+    type: "number",
+    typeOptions: { minValue: 0 },
+    displayOptions: { show: { resource: ["ai"], operation: ["createEmbedding"] } },
+    default: 0,
+    description:
+      "Optional output dimensionality. Set to 0 to omit. Only send this when the selected model lists a dimensions parameter.",
+  },
 
   // --- Rerank ---
   {
@@ -341,7 +383,8 @@ export const caedralProperties: INodeProperties[] = [
     type: "options",
     typeOptions: { loadOptionsMethod: "getRerankModels" },
     displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
-    default: "caedral-rerank",
+    default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },
@@ -381,7 +424,7 @@ export const caedralProperties: INodeProperties[] = [
     typeOptions: { minValue: 0, maxValue: 1, numberStepSize: 0.05 },
     displayOptions: { show: { resource: ["ai"], operation: ["rerank"] } },
     default: 0,
-    description: 'Only return documents with a relevance score above this threshold. 0 = no filtering.',
+    description: "Only return documents with a relevance score above this threshold. 0 = no filtering.",
   },
 
   // --- Image ---
@@ -391,7 +434,8 @@ export const caedralProperties: INodeProperties[] = [
     type: "options",
     typeOptions: { loadOptionsMethod: "getImageModels" },
     displayOptions: { show: { resource: ["image"], operation: ["imageGeneration"] } },
-    default: VISION_MODEL_ID,
+    default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },
@@ -407,36 +451,48 @@ export const caedralProperties: INodeProperties[] = [
     description: "Text description of the image to generate",
   },
   {
-    displayName: "Size",
-    name: "imageSize",
-    type: "options",
+    displayName: "Options",
+    name: "imageOptions",
+    type: "collection",
+    placeholder: "Add Option",
+    default: {},
     displayOptions: { show: { resource: ["image"], operation: ["imageGeneration"] } },
     options: [
-      { name: "1024x1024", value: "1024x1024" },
-      { name: "1024x1792", value: "1024x1792" },
-      { name: "1792x1024", value: "1792x1024" },
+      {
+        displayName: "Number of Images",
+        name: "n",
+        type: "number",
+        typeOptions: { minValue: 1, maxValue: 4 },
+        default: 1,
+        description: "Number of images to request when the model supports n",
+      },
+      {
+        displayName: "Seed",
+        name: "seed",
+        type: "number",
+        default: 0,
+        description: "Optional generation seed. Omitted when 0.",
+      },
+      {
+        displayName: "Size",
+        name: "size",
+        type: "string",
+        default: "",
+        placeholder: "1024x1024",
+        description: "Optional WIDTHxHEIGHT size when the model supports it",
+      },
     ],
-    default: "1024x1024",
-    description: "Requested dimensions, forwarded to Caedral Vision",
-  },
-  {
-    displayName: "Number of Images",
-    name: "imageN",
-    type: "number",
-    typeOptions: { minValue: 1, maxValue: 4 },
-    displayOptions: { show: { resource: ["image"], operation: ["imageGeneration"] } },
-    default: 1,
-    description: 'Number of images to request (1–4). The current gateway may still return a single image.',
   },
 
-  // --- Audio ---
+  // --- Speech ---
   {
     displayName: "Model Name or ID",
     name: "audioModel",
     type: "options",
-    typeOptions: { loadOptionsMethod: "getAudioModels" },
+    typeOptions: { loadOptionsMethod: "getSpeechModels" },
     displayOptions: { show: { resource: ["audio"], operation: ["audioGeneration"] } },
-    default: VOICE_MODEL_ID,
+    default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },
@@ -452,24 +508,206 @@ export const caedralProperties: INodeProperties[] = [
     description: "Text to convert to speech",
   },
   {
-    displayName: "Voice",
+    displayName: "Voice Name or ID",
     name: "audioVoice",
     type: "options",
+    typeOptions: {
+      loadOptionsMethod: "getSpeechVoices",
+      loadOptionsDependsOn: ["audioModel"],
+    },
     displayOptions: { show: { resource: ["audio"], operation: ["audioGeneration"] } },
-    options: [...VOICE_OPTIONS],
-    default: "alloy",
-    description: "Voice style forwarded to Caedral Voice (default alloy)",
+    default: "",
+    description:
+      'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },
   {
-    displayName: "Custom Voice",
-    name: "audioVoiceCustom",
-    type: "string",
-    displayOptions: {
-      show: { resource: ["audio"], operation: ["audioGeneration"], audioVoice: ["custom"] },
-    },
+    displayName: "Options",
+    name: "speechOptions",
+    type: "collection",
+    placeholder: "Add Option",
+    default: {},
+    displayOptions: { show: { resource: ["audio"], operation: ["audioGeneration"] } },
+    options: [
+      {
+        displayName: "Response Format",
+        name: "responseFormat",
+        type: "string",
+        default: "",
+        placeholder: "wav",
+        description: "Optional audio format (for example wav or mp3) when the model supports it",
+      },
+      {
+        displayName: "Speed",
+        name: "speed",
+        type: "number",
+        typeOptions: { minValue: 0.25, maxValue: 4, numberStepSize: 0.05 },
+        default: 1,
+        description: "Speech speed. Omitted when 1.",
+      },
+    ],
+  },
+
+  // --- Transcription ---
+  {
+    displayName: "Model Name or ID",
+    name: "transcriptionModel",
+    type: "options",
+    typeOptions: { loadOptionsMethod: "getTranscriptionModels" },
+    displayOptions: { show: { resource: ["audio"], operation: ["audioTranscription"] } },
     default: "",
-    placeholder: "alloy",
-    description: "Custom voice identifier when Voice is set to Custom",
+    required: true,
+    description:
+      'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+  },
+  {
+    displayName: "Input Source",
+    name: "transcriptionSource",
+    type: "options",
+    displayOptions: { show: { resource: ["audio"], operation: ["audioTranscription"] } },
+    options: [
+      { name: "Binary", value: "binary", description: "Use audio from an incoming binary property" },
+      { name: "URL", value: "url", description: "Use a publicly reachable audio URL" },
+    ],
+    default: "binary",
+  },
+  {
+    displayName: "Input Binary Field",
+    name: "transcriptionBinaryProperty",
+    type: "string",
+    default: "data",
+    required: true,
+    displayOptions: {
+      show: { resource: ["audio"], operation: ["audioTranscription"], transcriptionSource: ["binary"] },
+    },
+    description: "Name of the binary property that contains the audio file",
+  },
+  {
+    displayName: "Audio URL",
+    name: "transcriptionUrl",
+    type: "string",
+    default: "",
+    required: true,
+    placeholder: "https://example.com/audio.wav",
+    displayOptions: {
+      show: { resource: ["audio"], operation: ["audioTranscription"], transcriptionSource: ["url"] },
+    },
+    description: "Audio URL sent to POST /v1/audio/transcriptions as JSON file",
+  },
+
+  // --- Video ---
+  {
+    displayName: "Model Name or ID",
+    name: "videoModel",
+    type: "options",
+    typeOptions: { loadOptionsMethod: "getVideoModels" },
+    displayOptions: { show: { resource: ["video"], operation: ["videoGeneration"] } },
+    default: "",
+    required: true,
+    description:
+      'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+  },
+  {
+    displayName: "Prompt",
+    name: "videoPrompt",
+    type: "string",
+    typeOptions: { rows: 4 },
+    displayOptions: { show: { resource: ["video"], operation: ["videoGeneration"] } },
+    default: "",
+    required: true,
+    placeholder: "A paper boat drifting down a rain-slicked gutter at night",
+    description: "Text description of the video to generate",
+  },
+  {
+    displayName: "Wait for Completion",
+    name: "videoWaitForCompletion",
+    type: "boolean",
+    displayOptions: { show: { resource: ["video"], operation: ["videoGeneration"] } },
+    default: false,
+    description:
+      "Whether to poll GET /v1/videos/{ID} until the job finishes. The create call itself is always asynchronous.",
+  },
+  {
+    displayName: "Options",
+    name: "videoOptions",
+    type: "collection",
+    placeholder: "Add Option",
+    default: {},
+    displayOptions: { show: { resource: ["video"], operation: ["videoGeneration"] } },
+    options: [
+      {
+        displayName: "Aspect Ratio",
+        name: "aspectRatio",
+        type: "string",
+        default: "",
+        placeholder: "16:9",
+        description: "Optional aspect ratio when the model supports it",
+      },
+      {
+        displayName: "Duration (Seconds)",
+        name: "duration",
+        type: "number",
+        typeOptions: { minValue: 1 },
+        default: 0,
+        description: "Optional duration in seconds. Omitted when 0.",
+      },
+      {
+        displayName: "Generate Audio",
+        name: "generateAudio",
+        type: "boolean",
+        default: false,
+        description: "Whether to request audio with the video when the model supports it",
+      },
+      {
+        displayName: "Poll Interval (Ms)",
+        name: "pollIntervalMs",
+        type: "number",
+        typeOptions: { minValue: 500 },
+        default: 2000,
+        description: "Delay between status polls when Wait for Completion is enabled",
+      },
+      {
+        displayName: "Poll Timeout (Ms)",
+        name: "pollTimeoutMs",
+        type: "number",
+        typeOptions: { minValue: 1000 },
+        default: 300000,
+        description: "Maximum time to poll when Wait for Completion is enabled",
+      },
+      {
+        displayName: "Resolution",
+        name: "resolution",
+        type: "string",
+        default: "",
+        placeholder: "720p",
+        description: "Optional resolution such as 720p or 1080p when the model supports it",
+      },
+      {
+        displayName: "Seed",
+        name: "seed",
+        type: "number",
+        default: 0,
+        description: "Optional generation seed. Omitted when 0.",
+      },
+      {
+        displayName: "Size",
+        name: "size",
+        type: "string",
+        default: "",
+        placeholder: "1280x720",
+        description: "Optional WIDTHxHEIGHT size when the model supports it",
+      },
+    ],
+  },
+  {
+    displayName: "Video ID",
+    name: "videoId",
+    type: "string",
+    default: "",
+    required: true,
+    displayOptions: {
+      show: { resource: ["video"], operation: ["getVideoStatus", "getVideoContent"] },
+    },
+    description: "Job ID returned by Generate Video",
   },
 
   // --- Models ---
@@ -479,7 +717,8 @@ export const caedralProperties: INodeProperties[] = [
     type: "options",
     typeOptions: { loadOptionsMethod: "getCatalogModels" },
     displayOptions: { show: { resource: ["models"], operation: ["getModel"] } },
-    default: "caedral-titan",
+    default: "",
+    required: true,
     description:
       'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
   },

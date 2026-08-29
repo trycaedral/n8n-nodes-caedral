@@ -18,6 +18,8 @@ export type CatalogModel = {
   max_output?: number;
   pricing_tier?: string;
   owned_by?: string;
+  display_name?: string;
+  provider?: string;
   is_caedral_hosted?: boolean;
   is_free?: boolean;
   supported_parameters?: string[];
@@ -100,4 +102,61 @@ export function findCatalogModel(
   modelId: string,
 ): CatalogModel | undefined {
   return models.find((model) => model.id === modelId);
+}
+
+function firstNonEmpty(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+export function catalogProvider(model: CatalogModel): string {
+  const explicit = firstNonEmpty(model.provider, model.owned_by);
+  if (explicit) return explicit.replace(/^~/, "");
+  const slash = model.id.indexOf("/");
+  if (slash > 0) return model.id.slice(0, slash).replace(/^~/, "");
+  return "";
+}
+
+export function catalogDisplayName(model: CatalogModel): string {
+  return firstNonEmpty(model.display_name, model.name) || model.id;
+}
+
+/** Dropdown label. The option value must remain the exact catalog `id`. */
+export function catalogOptionLabel(model: CatalogModel): string {
+  const named = firstNonEmpty(model.display_name, model.name);
+  const provider = catalogProvider(model);
+  if (named && provider && named.toLowerCase() !== provider.toLowerCase()) {
+    return `${named} — ${provider}`;
+  }
+  return named || model.id;
+}
+
+export type CatalogSelectOption = {
+  name: string;
+  value: string;
+  description?: string;
+};
+
+export function toCatalogSelectOptions(models: CatalogModel[]): CatalogSelectOption[] {
+  const options = models.map((model) => {
+    const option: CatalogSelectOption = {
+      name: catalogOptionLabel(model),
+      value: model.id,
+    };
+    if (typeof model.description === "string" && model.description.trim()) {
+      option.description = model.description;
+    }
+    return option;
+  });
+  options.sort((a, b) => a.name.localeCompare(b.name));
+  return options;
+}
+
+export function optionsForEndpoint(
+  models: CatalogModel[],
+  canonicalPath: string,
+): CatalogSelectOption[] {
+  return toCatalogSelectOptions(filterModelsByEndpoint(models, canonicalPath));
 }

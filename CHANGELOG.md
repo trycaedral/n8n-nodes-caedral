@@ -15,7 +15,7 @@ Official n8n integration for the current Caedral production API. Pre-publication
 
 - Resource selector on the main node: Account, AI, Audio, Image, Model, Video
 - `GET /v1/models/:id` as **Get Model**
-- Dynamic per-operation model lists from production `GET /v1/models`
+- Dynamic per-operation model lists from production `GET /v1/models` (no packaged model-id catalog; labels use display name and provider)
 - Chat options: top_p, stop, penalties, tools JSON, response_format, user
 - Embedding `input_type`, `encoding_format`, and optional `dimensions`
 - Audio **Transcribe Audio** (`POST /v1/audio/transcriptions`)

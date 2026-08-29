@@ -6,6 +6,7 @@ import type {
 } from "n8n-workflow";
 import { NodeApiError, NodeConnectionTypes, NodeOperationError, UserError } from "n8n-workflow";
 
+import { DEFAULT_TIMEOUT_MS } from "../../shared/constants";
 import {
   buildRequestUrl,
   formatApiErrorMessage,
@@ -77,8 +78,8 @@ export class CaedralEmbeddings implements INodeType {
     displayName: "Caedral Embeddings",
     name: "caedralEmbeddings",
     icon: {
-      light: "file:../../icons/caedral.svg",
-      dark: "file:../../icons/caedral.dark.svg",
+      light: "file:caedral.svg",
+      dark: "file:caedral.dark.svg",
     },
     group: ["transform"],
     subtitle: '={{$parameter["model"]}}',
@@ -207,6 +208,7 @@ export class CaedralEmbeddings implements INodeType {
           json: true,
           returnFullResponse: true,
           ignoreHttpStatusErrors: true,
+          timeout: DEFAULT_TIMEOUT_MS,
         });
       } catch (error) {
         const message =

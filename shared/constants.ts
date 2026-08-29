@@ -3,6 +3,10 @@ export const DEFAULT_BASE_URL = "https://api.caedral.com";
 /** Default HTTP timeout for Caedral API calls (matches official SDKs). */
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
+/** Credential test and catalog loaders should fail fast instead of spinning forever. */
+export const CREDENTIAL_TEST_TIMEOUT_MS = 15_000;
+export const CATALOG_TIMEOUT_MS = 20_000;
+
 export const MAX_RERANK_DOCUMENTS = 100;
 
 /** Canonical inference paths from production GET /v1/models `recommended_endpoint.path`. */

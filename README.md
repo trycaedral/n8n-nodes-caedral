@@ -25,6 +25,12 @@ npm install n8n-nodes-caedral
 
 Restart n8n after installation.
 
+If credential test or execute spins forever, start n8n with IPv4-first DNS (some networks cannot reach Cloudflare AAAA records):
+
+```bash
+NODE_OPTIONS=--dns-result-order=ipv4first n8n start
+```
+
 ### n8n Cloud
 
 Community node verification for n8n Cloud is pending. Self-hosted instances can install from npm today.

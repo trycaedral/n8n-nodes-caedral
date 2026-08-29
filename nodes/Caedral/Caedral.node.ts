@@ -154,8 +154,8 @@ export class Caedral implements INodeType {
     displayName: "Caedral",
     name: "caedral",
     icon: {
-      light: "file:../../icons/caedral.svg",
-      dark: "file:../../icons/caedral.dark.svg",
+      light: "file:caedral.svg",
+      dark: "file:caedral.dark.svg",
     },
     group: ["transform"],
     version: 2,

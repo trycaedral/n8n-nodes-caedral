@@ -22,5 +22,6 @@ function copyDir(src, dest) {
 
 copyDir(join(ROOT, "icons"), join(DIST, "icons"));
 copyDir(join(ROOT, "nodes"), join(DIST, "nodes"));
+copyDir(join(ROOT, "credentials"), join(DIST, "credentials"));
 
 console.log("Copied static assets to dist/");

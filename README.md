@@ -112,11 +112,15 @@ Streaming (`stream: true`) is supported by the Caedral API but is not exposed on
 
 ## Model selection
 
-Chat, embedding, rerank, image, speech, transcription, and video fields load from `GET /v1/models` when credentials are available, then filter by `recommended_endpoint.path`.
+Every model dropdown loads `GET /v1/models` from the credential's base URL (default `https://api.caedral.com`) and filters by `recommended_endpoint.path`. There is no packaged catalog of model IDs. When Caedral adds a model in production, it appears in n8n on the next dropdown refresh — no node update required.
+
+Labels prefer `<display name> — <provider>` (from `display_name` / `name` and `provider` / `owned_by`). The option **value** is always the exact API model id.
+
+Saved workflows keep their stored model id even if that id later leaves the catalog. Execution sends that id to the API; the API decides whether it is still valid.
+
+If the catalog request fails, the dropdown shows an error instead of obsolete fallback IDs. You can still set a model id with an n8n expression.
 
 The following historical IDs are **not** valid production models and are not offered as fallbacks: `caedral-base`, `caedral-titan`, `caedral-olympus`, `caedral-primordial`.
-
-Hosted products that currently appear in the live catalog (this set can change) include `caedral-embed-e1-small-v1` and `caedral-voice-1`. Prefer the dropdown over memorizing IDs.
 
 ## AI sub-nodes
 

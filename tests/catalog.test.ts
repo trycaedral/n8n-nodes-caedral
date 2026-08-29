@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  catalogOptionLabel,
   distinctEndpointPaths,
   filterModelsByEndpoint,
   modelUsesEndpoint,
   parseCatalogResponse,
+  toCatalogSelectOptions,
   type CatalogModel,
 } from "../nodes/Caedral/catalog";
 import { ENDPOINT_PATHS } from "../shared/constants";
@@ -149,5 +151,50 @@ describe("endpoint discovery and filtering", () => {
       recommended_endpoint: { path: "/v1/images", aliases: [ENDPOINT_PATHS.imageGenerations] },
     };
     expect(modelUsesEndpoint(aliasOnly, ENDPOINT_PATHS.imageGenerations)).toBe(true);
+  });
+});
+
+describe("catalog option labels", () => {
+  it("uses display name and provider when present, and keeps the exact API id as the value", () => {
+    const model: CatalogModel = {
+      id: "minimax/minimax-m3:free",
+      display_name: "MiniMax M3",
+      provider: "MiniMax",
+      recommended_endpoint: { path: ENDPOINT_PATHS.chatCompletions },
+    };
+    expect(catalogOptionLabel(model)).toBe("MiniMax M3 — MiniMax");
+    expect(toCatalogSelectOptions([model])).toEqual([
+      {
+        name: "MiniMax M3 — MiniMax",
+        value: "minimax/minimax-m3:free",
+      },
+    ]);
+  });
+
+  it("falls back to name and owned_by, then to the raw id", () => {
+    expect(
+      catalogOptionLabel({
+        id: "minimax/minimax-m3:free",
+        name: "MiniMax M3",
+        owned_by: "minimax",
+      }),
+    ).toBe("MiniMax M3 — minimax");
+    expect(catalogOptionLabel({ id: "future-provider/model-xyz-2030" })).toBe(
+      "future-provider/model-xyz-2030",
+    );
+    expect(
+      catalogOptionLabel({
+        id: "minimax/minimax-m3:free",
+        name: "MiniMax M3",
+      }),
+    ).toBe("MiniMax M3 — minimax");
+  });
+
+  it("never mutates the stored model id", () => {
+    const id = "~anthropic/claude-fable-latest";
+    const options = toCatalogSelectOptions([
+      { id, name: "Claude Fable Latest", owned_by: "~anthropic" },
+    ]);
+    expect(options[0]?.value).toBe(id);
   });
 });

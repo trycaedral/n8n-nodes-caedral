@@ -3,32 +3,25 @@ import { NodeOperationError } from "n8n-workflow";
 
 import { CATALOG_LOAD_ERROR, ENDPOINT_PATHS } from "../../shared/constants";
 import {
-  filterModelsByEndpoint,
   findCatalogModel,
+  optionsForEndpoint,
   parseCatalogResponse,
+  toCatalogSelectOptions,
   type CatalogModel,
 } from "./catalog";
 import { buildRequestUrl, normalizeBaseUrl } from "./helpers";
 
-function optionName(model: CatalogModel, fallback: string): string {
-  const label = model.name?.trim() || fallback;
-  return model.id && model.id !== label ? `${label} (${model.id})` : label;
-}
-
-export function toModelOptions(
-  models: CatalogModel[],
-  fallbackName: string,
+function asNodeOptions(
+  options: ReturnType<typeof toCatalogSelectOptions>,
 ): INodePropertyOptions[] {
-  const options = models.map((model) => ({
-    name: optionName(model, fallbackName),
-    value: model.id,
-    description: model.description,
-  }));
-  options.sort((a, b) => a.name.localeCompare(b.name));
   return options;
 }
 
-async function fetchCatalogOrThrow(
+/**
+ * Always hits GET /v1/models for the credential's base URL.
+ * No package-level catalog snapshot is stored between calls.
+ */
+export async function fetchLiveCatalog(
   context: ILoadOptionsFunctions,
 ): Promise<CatalogModel[]> {
   try {
@@ -57,43 +50,42 @@ async function fetchCatalogOrThrow(
   }
 }
 
-async function optionsForEndpoint(
+async function loadOptionsForEndpoint(
   context: ILoadOptionsFunctions,
   path: string,
-  fallbackName: string,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalogOrThrow(context);
-  return toModelOptions(filterModelsByEndpoint(catalog, path), fallbackName);
+  const catalog = await fetchLiveCatalog(context);
+  return asNodeOptions(optionsForEndpoint(catalog, path));
 }
 
 export async function getChatModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.chatCompletions, "Chat model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.chatCompletions);
 }
 
 export async function getEmbeddingModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.embeddings, "Embedding model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.embeddings);
 }
 
 export async function getRerankModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.rerank, "Rerank model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.rerank);
 }
 
 export async function getImageModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.imageGenerations, "Image model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.imageGenerations);
 }
 
 export async function getSpeechModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.audioSpeech, "Speech model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.audioSpeech);
 }
 
 /** @deprecated Use getSpeechModels. Kept so older node versions that referenced getAudioModels still resolve. */
@@ -102,20 +94,20 @@ export const getAudioModels = getSpeechModels;
 export async function getTranscriptionModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.audioTranscriptions, "Transcription model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.audioTranscriptions);
 }
 
 export async function getVideoModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  return optionsForEndpoint(this, ENDPOINT_PATHS.videos, "Video model");
+  return loadOptionsForEndpoint(this, ENDPOINT_PATHS.videos);
 }
 
 export async function getCatalogModels(
   this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-  const catalog = await fetchCatalogOrThrow(this);
-  return toModelOptions(catalog, "Model");
+  const catalog = await fetchLiveCatalog(this);
+  return asNodeOptions(toCatalogSelectOptions(catalog));
 }
 
 export async function getSpeechVoices(
@@ -129,7 +121,7 @@ export async function getSpeechVoices(
   }
   if (!modelId) return [];
 
-  const catalog = await fetchCatalogOrThrow(this);
+  const catalog = await fetchLiveCatalog(this);
   const model = findCatalogModel(catalog, modelId);
   const voices = model?.supported_voices;
   if (!Array.isArray(voices) || voices.length === 0) return [];

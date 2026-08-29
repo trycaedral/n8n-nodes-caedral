@@ -150,6 +150,32 @@ describe("Caedral node — chatCompletion parameter retrieval", () => {
       body: { model: "my-org/custom-chat" },
     });
   });
+
+  it("sends a saved workflow model ID as-is without consulting the catalog", async () => {
+    const savedId = "future-provider/model-xyz-2030";
+    const { context, httpRequestWithAuthentication } = createContext({
+      operation: "chatCompletion",
+      model: savedId,
+      messageMode: "simple",
+      message: "Hello!",
+      temperature: 1,
+      maxTokens: 0,
+      systemPrompt: "",
+    });
+
+    const node = new Caedral();
+    await node.execute.call(context);
+    const request = httpRequestWithAuthentication.mock.calls[0]?.[1] as {
+      url: string;
+      body: { model: string };
+    };
+    expect(request.url).toBe("http://localhost:5001/v1/chat/completions");
+    expect(request.body.model).toBe(savedId);
+    expect(httpRequestWithAuthentication.mock.calls.every((call) => {
+      const options = call[1] as { url?: string };
+      return !String(options.url ?? "").endsWith("/v1/models");
+    })).toBe(true);
+  });
 });
 
 describe("Caedral node — resource operations", () => {

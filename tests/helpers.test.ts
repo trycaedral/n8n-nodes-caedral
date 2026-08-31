@@ -127,7 +127,23 @@ describe("buildChatCompletionBody", () => {
     });
   });
 
-  it("includes optional parameters when provided", () => {
+  it("includes Notre options when requested", () => {
+    expect(
+      buildChatCompletionBody({
+        model: "openai/gpt-5-mini",
+        messageMode: "simple",
+        message: "Hello",
+        notreMode: "auto",
+        notreTelemetry: true,
+      }),
+    ).toEqual({
+      model: "openai/gpt-5-mini",
+      messages: [{ role: "user", content: "Hello" }],
+      notre: { mode: "auto", telemetry: true },
+    });
+  });
+
+  it("includes optional parameters", () => {
     expect(
       buildChatCompletionBody({
         model: "openai/gpt-5-mini",

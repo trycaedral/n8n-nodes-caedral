@@ -39,6 +39,7 @@ export type ChatCompletionRequestBody = {
   tools?: unknown[];
   tool_choice?: unknown;
   response_format?: { type: string };
+  notre?: { mode?: "off" | "auto"; telemetry?: boolean };
 };
 
 export type ChatCompletionResponse = {
@@ -321,6 +322,8 @@ export function buildChatCompletionBody(params: {
   toolsJson?: string | unknown[];
   toolChoice?: string;
   responseFormat?: string;
+  notreMode?: "off" | "auto";
+  notreTelemetry?: boolean;
   itemIndex?: number;
 }): ChatCompletionRequestBody {
   const messages = resolveMessages(
@@ -367,6 +370,13 @@ export function buildChatCompletionBody(params: {
     });
     body.tools = tools;
     if (params.toolChoice) body.tool_choice = params.toolChoice;
+  }
+
+  if (params.notreMode === "auto" || params.notreTelemetry) {
+    body.notre = {
+      ...(params.notreMode ? { mode: params.notreMode } : {}),
+      ...(params.notreTelemetry ? { telemetry: true } : {}),
+    };
   }
 
   return body;

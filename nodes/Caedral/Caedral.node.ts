@@ -44,6 +44,8 @@ type ChatOptions = {
   toolsJson?: string | unknown[];
   topP?: number;
   user?: string;
+  notreMode?: "off" | "auto";
+  notreTelemetry?: boolean;
 };
 
 type ImageOptions = {
@@ -288,6 +290,8 @@ export class Caedral implements INodeType {
             toolsJson: chatOptions.toolsJson,
             toolChoice: chatOptions.toolChoice,
             responseFormat: chatOptions.responseFormat,
+            notreMode: chatOptions.notreMode,
+            notreTelemetry: chatOptions.notreTelemetry,
             itemIndex,
           });
 

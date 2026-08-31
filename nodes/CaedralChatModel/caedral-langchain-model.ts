@@ -76,6 +76,8 @@ type CaedralChatModelConfig = {
   temperature: number;
   timeout?: number;
   maxRetries?: number;
+  notreMode?: 'off' | 'auto';
+  notreTelemetry?: boolean;
   node?: INode;
   httpRequest: HttpRequestFn;
 };
@@ -507,6 +509,15 @@ export class CaedralLangChainChatModel {
       messages: formatted,
       temperature: this.config.temperature,
     };
+
+    if (this.config.notreMode && this.config.notreMode !== 'off') {
+      body.notre = {
+        mode: this.config.notreMode,
+        ...(this.config.notreTelemetry ? { telemetry: true } : {}),
+      };
+    } else if (this.config.notreTelemetry) {
+      body.notre = { mode: 'off', telemetry: true };
+    }
 
     const boundTools = extractToolsFromOptions(options);
     if (boundTools.length > 0) {

@@ -106,6 +106,27 @@ describe("CaedralLangChainChatModel", () => {
     ]);
   });
 
+  it("serializes notre auto with telemetry per golden contract", async () => {
+    const httpRequest = vi.fn().mockResolvedValue({
+      choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+    });
+
+    const model = new CaedralLangChainChatModel({
+      baseUrl: "https://api.caedral.com",
+      apiKey: "test-key",
+      model: "caedral-base",
+      notreMode: "auto",
+      notreTelemetry: true,
+      httpRequest,
+    });
+
+    await model.invoke([{ _getType: () => "human", content: "Hello" }]);
+
+    expect(httpRequest).toHaveBeenCalledOnce();
+    const requestBody = httpRequest.mock.calls[0][0].body as Record<string, unknown>;
+    expect(requestBody.notre).toEqual({ mode: "auto", telemetry: true });
+  });
+
   it("passes tools and tool_choice to the Caedral API via _generate options", async () => {
     const httpRequest = vi.fn().mockResolvedValue({
       choices: [

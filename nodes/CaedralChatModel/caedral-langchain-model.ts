@@ -516,7 +516,11 @@ export class CaedralLangChainChatModel {
         ...(this.config.notreTelemetry ? { telemetry: true } : {}),
       };
     } else if (this.config.notreTelemetry) {
-      body.notre = { mode: 'off', telemetry: true };
+      // telemetry-only must NOT opt the request out of the deployment gate:
+      // "off" would force-disable Notre even when the gateway rollout applies
+      // (B13). "auto" keeps the formal customer opt-out (explicit mode:'off')
+      // while inheriting the deployment default.
+      body.notre = { mode: 'auto', telemetry: true };
     }
 
     const boundTools = extractToolsFromOptions(options);

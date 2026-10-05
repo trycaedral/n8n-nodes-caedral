@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.1 — 2026-10-05
+
+- Security: `normalizeBaseUrl` now allowlists Caedral API hosts (api.caedral.com, localhost/127.0.0.1/::1, internal api-gateway) — blocks SSRF-style base URL overrides
+- Tests: allowlist coverage
+
 ## 2.0.0 — 2026-08-29
 
 Official n8n integration for the current Caedral production API. Pre-publication validation found obsolete branded chat-tier fallbacks and incomplete modality coverage; those are corrected in this unpublished 2.0.0.

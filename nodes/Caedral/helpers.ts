@@ -113,7 +113,61 @@ export type CaedralApiErrorBody = {
 };
 
 export function normalizeBaseUrl(baseUrl?: string): string {
-  return (baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const trimmed = (baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  return assertAllowedCaedralBaseUrl(trimmed);
+}
+
+const ALLOWED_BASE_HOSTS = new Set([
+  "api.caedral.com",
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  // Local n8n profile in platform/docker-compose.override.yml
+  "api-gateway",
+  // Host-run gateway from an n8n container (pasta / Docker Desktop)
+  "host.docker.internal",
+]);
+
+/**
+ * Restrict credential base URLs so a compromised workflow cannot exfiltrate the
+ * API key to arbitrary hosts (SSRF / credential theft).
+ */
+export function assertAllowedCaedralBaseUrl(baseUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    validationFail("Base URL must be a valid http or https URL");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    validationFail("Base URL must use http or https");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  if (hostname === "api.caedral.com" && parsed.protocol !== "https:") {
+    validationFail("Production API base URL must use https");
+  }
+
+  if (hostname.endsWith(".caedral.com")) {
+    if (parsed.protocol !== "https:") {
+      validationFail("*.caedral.com base URLs must use https");
+    }
+    return baseUrl;
+  }
+
+  if (ALLOWED_BASE_HOSTS.has(hostname)) {
+    return baseUrl;
+  }
+
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && hostname !== "127.0.0.1") {
+    validationFail("Base URL must not target private or internal IP addresses");
+  }
+
+  validationFail(
+    `Base URL host "${hostname}" is not allowed. Use https://api.caedral.com or a local development URL.`,
+  );
 }
 
 export function buildRequestUrl(baseUrl: string, path: string): string {

@@ -3,6 +3,7 @@ import { NodeApiError, NodeOperationError } from "n8n-workflow";
 import type { IExecuteFunctions } from "n8n-workflow";
 
 import { Caedral } from "../nodes/Caedral/Caedral.node";
+import { FAKE_CREDENTIAL_KEY } from "./fake-credentials";
 
 const CHAT_RESPONSE = {
   id: "chatcmpl-test",
@@ -32,7 +33,7 @@ function createContext(
   const context = {
     getInputData: () => [{ json: {}, binary: extras?.binary }],
     getCredentials: async () => ({
-      apiKey: "cd_live_test",
+      apiKey: FAKE_CREDENTIAL_KEY,
       baseUrl: "http://localhost:5001",
     }),
     getNodeParameter(name: string, _itemIndex: number, ...fallback: unknown[]) {

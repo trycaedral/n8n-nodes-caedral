@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CaedralEmbeddings } from "../nodes/CaedralEmbeddings/CaedralEmbeddings.node";
+import { FAKE_CREDENTIAL_KEY } from "./fake-credentials";
 
 function findOptionValues(
   prop: { options?: Array<{ value: unknown }> } | undefined,
@@ -41,7 +42,7 @@ describe("CaedralEmbeddings node", () => {
 
     const mockContext = {
       getCredentials: vi.fn().mockResolvedValue({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNodeParameter: vi.fn((name: string) => {
@@ -113,7 +114,7 @@ describe("CaedralEmbeddings node", () => {
 
     const mockContext = {
       getCredentials: vi.fn().mockResolvedValue({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNodeParameter: vi.fn((name: string) => {
@@ -165,7 +166,7 @@ describe("CaedralEmbeddings node", () => {
 
     const mockContext = {
       getCredentials: vi.fn().mockResolvedValue({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNodeParameter: vi.fn((name: string) => {

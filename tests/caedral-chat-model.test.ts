@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+// Explicitly fake — tests never carry real credentials.
+const FAKE_MODEL_KEY = "dummy-model-test";
+
 
 import {
   CaedralLangChainChatModel,
@@ -23,7 +26,7 @@ describe("CaedralLangChainChatModel", () => {
   it("exposes bindTools returning a LangChain-compatible Runnable", () => {
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "openai/gpt-5-mini",
       temperature: 0.7,
       httpRequest: vi.fn(),
@@ -65,7 +68,7 @@ describe("CaedralLangChainChatModel", () => {
 
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "openai/gpt-5-mini",
       temperature: 0.2,
       httpRequest,
@@ -113,7 +116,7 @@ describe("CaedralLangChainChatModel", () => {
 
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "caedral-base",
       notreMode: "auto",
       notreTelemetry: true,
@@ -150,7 +153,7 @@ describe("CaedralLangChainChatModel", () => {
 
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "openai/gpt-5-mini",
       temperature: 0.2,
       httpRequest,

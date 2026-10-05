@@ -1,22 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config } from "dotenv";
 import { resolve } from "node:path";
-import { buildRequestUrl, normalizeBaseUrl } from "../nodes/Caedral/helpers";
+import {
+  BASE_URL,
+  httpGet,
+  httpGetWithoutAuth,
+  httpPost,
+  isGatewayHealthy,
+} from "./integration-http";
 
 config({ path: resolve(__dirname, "../.env") });
-
-const BASE_URL = normalizeBaseUrl(
-  process.env.CAEDRAL_BASE_URL ?? "http://localhost:5001",
-);
-
-async function gatewayHealthy(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE_URL}/health`);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 async function createEphemeralKey(): Promise<{
   rawKey: string;
@@ -55,14 +48,6 @@ async function createEphemeralKey(): Promise<{
   return { rawKey, cleanup };
 }
 
-function headers(apiKey: string) {
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-}
-
 type LiveModel = {
   id: string;
   recommended_endpoint?: { path?: string };
@@ -70,7 +55,7 @@ type LiveModel = {
 };
 
 async function catalogModels(apiKey: string): Promise<LiveModel[]> {
-  const res = await fetch(buildRequestUrl(BASE_URL, "/v1/models"), { headers: headers(apiKey) });
+  const res = await httpGet("/v1/models", apiKey);
   expect(res.status).toBe(200);
   const body = (await res.json()) as { object?: string; data?: LiveModel[] };
   expect(Array.isArray(body.data)).toBe(true);
@@ -95,7 +80,7 @@ const runLiveGateway =
 
 describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () => {
   beforeAll(async () => {
-    const healthy = await gatewayHealthy();
+    const healthy = await isGatewayHealthy();
     if (!healthy) {
       throw new Error(
         `[n8n integration] CAEDRAL_GATEWAY_LIVE=1 but gateway not reachable at ${BASE_URL}`,
@@ -108,8 +93,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/models");
-        const res = await fetch(url, { headers: headers(rawKey) });
+        const res = await httpGet("/v1/models", rawKey);
         expect(res.status).toBe(200);
 
         const body = (await res.json()) as {
@@ -136,8 +120,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/usage");
-        const res = await fetch(url, { headers: headers(rawKey) });
+        const res = await httpGet("/v1/usage", rawKey);
         expect(res.status).toBe(200);
 
         const body = (await res.json()) as {
@@ -164,17 +147,12 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/chat/completions");
-        const res = await fetch(url, {
-          method: "POST",
-          headers: headers(rawKey),
-          body: JSON.stringify({
-            model: firstModelForPath(await catalogModels(rawKey), "/v1/chat/completions"),
-            messages: [
-              { role: "system", content: "You are a helpful assistant. Reply with exactly: SYSTEM_OK" },
-              { role: "user", content: "Test" },
-            ],
-          }),
+        const res = await httpPost("/v1/chat/completions", rawKey, {
+          model: firstModelForPath(await catalogModels(rawKey), "/v1/chat/completions"),
+          messages: [
+            { role: "system", content: "You are a helpful assistant. Reply with exactly: SYSTEM_OK" },
+            { role: "user", content: "Test" },
+          ],
         });
 
         expect([200, 502]).toContain(res.status);
@@ -196,14 +174,9 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/embeddings");
-        const res = await fetch(url, {
-          method: "POST",
-          headers: headers(rawKey),
-          body: JSON.stringify({
-            model: firstModelForPath(await catalogModels(rawKey), "/v1/embeddings"),
-            input: "Hello world",
-          }),
+        const res = await httpPost("/v1/embeddings", rawKey, {
+          model: firstModelForPath(await catalogModels(rawKey), "/v1/embeddings"),
+          input: "Hello world",
         });
 
         expect([200, 402, 502]).toContain(res.status);
@@ -227,15 +200,10 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/images/generations");
-        const res = await fetch(url, {
-          method: "POST",
-          headers: headers(rawKey),
-          body: JSON.stringify({
-            model: firstModelForPath(await catalogModels(rawKey), "/v1/images/generations"),
-            prompt: "A red circle on white background",
-            size: "1024x1024",
-          }),
+        const res = await httpPost("/v1/images/generations", rawKey, {
+          model: firstModelForPath(await catalogModels(rawKey), "/v1/images/generations"),
+          prompt: "A red circle on white background",
+          size: "1024x1024",
         });
 
         expect([200, 402, 502]).toContain(res.status);
@@ -255,21 +223,16 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/audio/speech");
         const models = await catalogModels(rawKey);
         const speechModel = models.find(
           (model) => model.recommended_endpoint?.path === "/v1/audio/speech",
         );
         expect(speechModel?.id).toBeTruthy();
         const voice = speechModel?.supported_voices?.[0];
-        const res = await fetch(url, {
-          method: "POST",
-          headers: headers(rawKey),
-          body: JSON.stringify({
-            model: speechModel?.id,
-            input: "Hello world",
-            ...(voice ? { voice } : {}),
-          }),
+        const res = await httpPost("/v1/audio/speech", rawKey, {
+          model: speechModel?.id,
+          input: "Hello world",
+          ...(voice ? { voice } : {}),
         });
 
         expect([200, 402, 502]).toContain(res.status);
@@ -289,20 +252,15 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/rerank");
-        const res = await fetch(url, {
-          method: "POST",
-          headers: headers(rawKey),
-          body: JSON.stringify({
-            model: firstModelForPath(await catalogModels(rawKey), "/v1/rerank"),
-            query: "What is the capital of France?",
-            documents: [
-              "Paris is the capital of France.",
-              "Berlin is in Germany.",
-              "London is in England.",
-            ],
-            top_n: 2,
-          }),
+        const res = await httpPost("/v1/rerank", rawKey, {
+          model: firstModelForPath(await catalogModels(rawKey), "/v1/rerank"),
+          query: "What is the capital of France?",
+          documents: [
+            "Paris is the capital of France.",
+            "Berlin is in Germany.",
+            "London is in England.",
+          ],
+          top_n: 2,
         });
 
         expect([200, 402, 502]).toContain(res.status);
@@ -323,10 +281,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
   it(
     "401 for invalid API key on protected endpoint",
     async () => {
-      const url = buildRequestUrl(BASE_URL, "/v1/usage");
-      const res = await fetch(url, {
-        headers: headers("cd_live_INVALID_KEY_123"),
-      });
+      const res = await httpGet("/v1/usage", "cd_live_INVALID_KEY_123");
       expect(res.status).toBe(401);
     },
     15_000,
@@ -335,10 +290,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
   it(
     "401 for malformed API key",
     async () => {
-      const url = buildRequestUrl(BASE_URL, "/v1/usage");
-      const res = await fetch(url, {
-        headers: headers("not_a_valid_key_at_all"),
-      });
+      const res = await httpGet("/v1/usage", "not_a_valid_key_at_all");
       expect(res.status).toBe(401);
     },
     15_000,
@@ -347,10 +299,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
   it(
     "401 for missing Authorization header",
     async () => {
-      const url = buildRequestUrl(BASE_URL, "/v1/usage");
-      const res = await fetch(url, {
-        headers: { Accept: "application/json" },
-      });
+      const res = await httpGetWithoutAuth("/v1/usage", { Accept: "application/json" });
       expect(res.status).toBe(401);
     },
     15_000,

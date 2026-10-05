@@ -17,6 +17,7 @@ import {
   getTranscriptionModels,
   getVideoModels,
 } from "../nodes/Caedral/models";
+import { FAKE_CREDENTIAL_KEY } from "./fake-credentials";
 
 const FUTURE_CHAT_ID = "future-provider/model-xyz-2030";
 
@@ -113,7 +114,7 @@ function loadContext(
     getCredentials: extras?.fail
       ? vi.fn().mockRejectedValue(new Error("missing credentials"))
       : vi.fn().mockResolvedValue({
-          apiKey: "cd_live_test",
+          apiKey: FAKE_CREDENTIAL_KEY,
           baseUrl: extras?.baseUrl ?? "https://api.caedral.com",
         }),
     getNode: () => ({
@@ -164,12 +165,12 @@ describe("dynamic model loading", () => {
   });
 
   it("queries the configured base URL instead of assuming production", async () => {
-    const context = loadContext(CATALOG, { baseUrl: "https://gateway.example.test/" });
+    const context = loadContext(CATALOG, { baseUrl: "http://localhost:5001/" });
     await fetchLiveCatalog(context as never);
     expect(context.helpers.httpRequestWithAuthentication).toHaveBeenCalledWith(
       "caedralApi",
       expect.objectContaining({
-        url: "https://gateway.example.test/v1/models",
+        url: "http://localhost:5001/v1/models",
       }),
     );
   });
@@ -229,7 +230,7 @@ describe("dynamic model loading", () => {
       });
     const context = {
       getCredentials: vi.fn().mockResolvedValue({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNode: () => ({

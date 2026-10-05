@@ -76,6 +76,8 @@ type CaedralChatModelConfig = {
   temperature: number;
   timeout?: number;
   maxRetries?: number;
+  notreMode?: 'off' | 'auto';
+  notreTelemetry?: boolean;
   node?: INode;
   httpRequest: HttpRequestFn;
 };
@@ -507,6 +509,19 @@ export class CaedralLangChainChatModel {
       messages: formatted,
       temperature: this.config.temperature,
     };
+
+    if (this.config.notreMode && this.config.notreMode !== 'off') {
+      body.notre = {
+        mode: this.config.notreMode,
+        ...(this.config.notreTelemetry ? { telemetry: true } : {}),
+      };
+    } else if (this.config.notreTelemetry) {
+      // telemetry-only must NOT opt the request out of the deployment gate:
+      // "off" would force-disable Notre even when the gateway rollout applies
+      // (B13). "auto" keeps the formal customer opt-out (explicit mode:'off')
+      // while inheriting the deployment default.
+      body.notre = { mode: 'auto', telemetry: true };
+    }
 
     const boundTools = extractToolsFromOptions(options);
     if (boundTools.length > 0) {

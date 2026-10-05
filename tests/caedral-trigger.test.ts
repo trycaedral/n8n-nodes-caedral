@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { NodeApiError, NodeOperationError } from "n8n-workflow";
 
 import { CaedralTrigger } from "../nodes/CaedralTrigger/CaedralTrigger.node";
+import { FAKE_CREDENTIAL_KEY } from "./fake-credentials";
 
 const USAGE = {
   accountStatus: "active",
@@ -37,7 +38,7 @@ const USAGE = {
 function pollContext(params: Record<string, unknown>, body: unknown = USAGE, statusCode = 200) {
   return {
     getCredentials: vi.fn().mockResolvedValue({
-      apiKey: "cd_live_test",
+      apiKey: FAKE_CREDENTIAL_KEY,
       baseUrl: "https://api.caedral.com",
     }),
     getNodeParameter: vi.fn((name: string) => params[name]),

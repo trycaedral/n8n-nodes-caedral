@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+// Explicitly fake — tests never carry real credentials.
+const FAKE_MODEL_KEY = "dummy-model-test";
+
 
 import {
   CaedralLangChainChatModel,
@@ -23,7 +26,7 @@ describe("CaedralLangChainChatModel", () => {
   it("exposes bindTools returning a LangChain-compatible Runnable", () => {
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "openai/gpt-5-mini",
       temperature: 0.7,
       httpRequest: vi.fn(),
@@ -65,7 +68,7 @@ describe("CaedralLangChainChatModel", () => {
 
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "openai/gpt-5-mini",
       temperature: 0.2,
       httpRequest,
@@ -106,6 +109,27 @@ describe("CaedralLangChainChatModel", () => {
     ]);
   });
 
+  it("serializes notre auto with telemetry per golden contract", async () => {
+    const httpRequest = vi.fn().mockResolvedValue({
+      choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+    });
+
+    const model = new CaedralLangChainChatModel({
+      baseUrl: "https://api.caedral.com",
+      apiKey: FAKE_MODEL_KEY,
+      model: "caedral-base",
+      notreMode: "auto",
+      notreTelemetry: true,
+      httpRequest,
+    });
+
+    await model.invoke([{ _getType: () => "human", content: "Hello" }]);
+
+    expect(httpRequest).toHaveBeenCalledOnce();
+    const requestBody = httpRequest.mock.calls[0][0].body as Record<string, unknown>;
+    expect(requestBody.notre).toEqual({ mode: "auto", telemetry: true });
+  });
+
   it("passes tools and tool_choice to the Caedral API via _generate options", async () => {
     const httpRequest = vi.fn().mockResolvedValue({
       choices: [
@@ -129,7 +153,7 @@ describe("CaedralLangChainChatModel", () => {
 
     const model = new CaedralLangChainChatModel({
       baseUrl: "https://api.caedral.com",
-      apiKey: "test-key",
+      apiKey: FAKE_MODEL_KEY,
       model: "openai/gpt-5-mini",
       temperature: 0.2,
       httpRequest,

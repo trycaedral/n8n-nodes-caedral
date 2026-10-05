@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IExecuteFunctions } from "n8n-workflow";
+// Explicitly fake — regression tests never carry real credentials.
+const FAKE_CREDENTIAL_KEY = "dummy-regression-key";
+
 
 import { Caedral } from "../nodes/Caedral/Caedral.node";
 import { CaedralChatModel } from "../nodes/CaedralChatModel/CaedralChatModel.node";
@@ -48,7 +51,7 @@ describe("v2 manual-test regressions", () => {
     const context = {
       getInputData: () => [{ json: {} }],
       getCredentials: async () => ({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNodeParameter(name: string, _itemIndex: number, ...fallback: unknown[]) {
@@ -104,7 +107,7 @@ describe("v2 manual-test regressions", () => {
     const context = {
       getInputData: () => [{ json: {} }],
       getCredentials: async () => ({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNodeParameter(name: string, _itemIndex: number, ...fallback: unknown[]) {
@@ -169,7 +172,7 @@ describe("v2 manual-test regressions", () => {
     };
     const loadContext = {
       getCredentials: vi.fn().mockResolvedValue({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNode: () => ({
@@ -199,7 +202,7 @@ describe("v2 manual-test regressions", () => {
     const executeContext = {
       getInputData: () => [{ json: {} }],
       getCredentials: async () => ({
-        apiKey: "cd_live_test",
+        apiKey: FAKE_CREDENTIAL_KEY,
         baseUrl: "https://api.caedral.com",
       }),
       getNodeParameter(name: string, _itemIndex: number, ...fallback: unknown[]) {

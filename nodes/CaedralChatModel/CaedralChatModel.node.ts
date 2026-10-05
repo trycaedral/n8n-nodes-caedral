@@ -19,6 +19,8 @@ type CaedralCredentials = {
 type ChatModelOptions = {
   timeout?: number;
   maxRetries?: number;
+  notreMode?: 'off' | 'auto';
+  notreTelemetry?: boolean;
 };
 
 /**
@@ -100,6 +102,24 @@ export class CaedralChatModel implements INodeType {
             default: DEFAULT_TIMEOUT_MS,
             description: "Request timeout in milliseconds",
           },
+          {
+            displayName: "Notre Mode",
+            name: "notreMode",
+            type: "options",
+            options: [
+              { name: "Off", value: "off" },
+              { name: "Auto", value: "auto" },
+            ],
+            default: "off",
+            description: "Optional Notre platform optimization (omit for existing behavior)",
+          },
+          {
+            displayName: "Notre Telemetry",
+            name: "notreTelemetry",
+            type: "boolean",
+            default: false,
+            description: "Include Notre metadata in API response when supported",
+          },
         ],
       },
     ],
@@ -134,6 +154,8 @@ export class CaedralChatModel implements INodeType {
       temperature,
       timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
       maxRetries: options.maxRetries ?? 2,
+      notreMode: options.notreMode,
+      notreTelemetry: options.notreTelemetry,
       node,
       httpRequest: (requestOptions) =>
         this.helpers.httpRequest({

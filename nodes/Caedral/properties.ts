@@ -306,6 +306,24 @@ export const caedralProperties: INodeProperties[] = [
         default: "",
         description: "End-user identifier for your own abuse tracking",
       },
+      {
+        displayName: "Notre Mode",
+        name: "notreMode",
+        type: "options",
+        options: [
+          { name: "Off", value: "off" },
+          { name: "Auto", value: "auto" },
+        ],
+        default: "off",
+        description: "Optional Notre runtime on Caedral chat completions",
+      },
+      {
+        displayName: "Notre Telemetry",
+        name: "notreTelemetry",
+        type: "boolean",
+        default: false,
+        description: "Include Notre public metadata on the non-stream response",
+      },
     ],
   },
 

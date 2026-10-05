@@ -1,26 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config } from "dotenv";
 import { resolve } from "node:path";
+import { buildChatCompletionBody } from "../nodes/Caedral/helpers";
 import {
-  buildChatCompletionBody,
-  buildRequestUrl,
-  normalizeBaseUrl,
-} from "../nodes/Caedral/helpers";
+  BASE_URL,
+  httpGet,
+  httpPost,
+  isGatewayHealthy,
+} from "./integration-http";
 
 config({ path: resolve(__dirname, "../.env") });
-
-const BASE_URL = normalizeBaseUrl(
-  process.env.CAEDRAL_BASE_URL ?? "http://localhost:5001",
-);
-
-async function gatewayHealthy(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE_URL}/health`);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 async function createEphemeralKey(): Promise<{ rawKey: string; cleanup: () => Promise<void> }> {
   const url = process.env.DATABASE_URL;
@@ -64,7 +53,7 @@ const runLiveGateway =
 
 describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors credential test + chat)", () => {
   beforeAll(async () => {
-    const healthy = await gatewayHealthy();
+    const healthy = await isGatewayHealthy();
     if (!healthy) {
       throw new Error(
         `[n8n integration] CAEDRAL_GATEWAY_LIVE=1 but gateway not reachable at ${BASE_URL}`,
@@ -77,13 +66,7 @@ describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors cred
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const url = buildRequestUrl(BASE_URL, "/v1/usage");
-        const res = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${rawKey}`,
-            Accept: "application/json",
-          },
-        });
+        const res = await httpGet("/v1/usage", rawKey);
 
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
@@ -108,12 +91,7 @@ describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors cred
     async () => {
       const { rawKey, cleanup } = await createEphemeralKey();
       try {
-        const catalogRes = await fetch(buildRequestUrl(BASE_URL, "/v1/models"), {
-          headers: {
-            Authorization: `Bearer ${rawKey}`,
-            Accept: "application/json",
-          },
-        });
+        const catalogRes = await httpGet("/v1/models", rawKey);
         expect(catalogRes.status).toBe(200);
         const catalog = (await catalogRes.json()) as {
           data?: Array<{ id: string; recommended_endpoint?: { path?: string } }>;
@@ -129,16 +107,7 @@ describe.skipIf(!runLiveGateway)("n8n node — gateway integration (mirrors cred
           message: "Reply with: n8n OK",
         });
 
-        const url = buildRequestUrl(BASE_URL, "/v1/chat/completions");
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${rawKey}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(body),
-        });
+        const res = await httpPost("/v1/chat/completions", rawKey, body);
 
         expect([200, 502]).toContain(res.status);
         if (res.status === 200) {

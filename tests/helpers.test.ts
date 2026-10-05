@@ -26,6 +26,36 @@ describe("normalizeBaseUrl", () => {
       "http://localhost:5001",
     );
   });
+
+  it("allows the docker-compose api-gateway hostname", () => {
+    expect(normalizeBaseUrl("http://api-gateway:5001")).toBe(
+      "http://api-gateway:5001",
+    );
+  });
+
+  it("allows host.docker.internal for host-run local gateway", () => {
+    expect(normalizeBaseUrl("http://host.docker.internal:5001")).toBe(
+      "http://host.docker.internal:5001",
+    );
+  });
+
+  it("rejects arbitrary hosts that could steal API keys", () => {
+    expect(() => normalizeBaseUrl("http://169.254.169.254")).toThrow(
+      NodeOperationError,
+    );
+    expect(() => normalizeBaseUrl("https://evil.example")).toThrow(
+      NodeOperationError,
+    );
+    expect(() => normalizeBaseUrl("http://10.0.0.5:5001")).toThrow(
+      NodeOperationError,
+    );
+  });
+
+  it("requires https for production hosts", () => {
+    expect(() => normalizeBaseUrl("http://api.caedral.com")).toThrow(
+      "https",
+    );
+  });
 });
 
 describe("buildRequestUrl", () => {
@@ -127,7 +157,23 @@ describe("buildChatCompletionBody", () => {
     });
   });
 
-  it("includes optional parameters when provided", () => {
+  it("includes Notre options when requested", () => {
+    expect(
+      buildChatCompletionBody({
+        model: "openai/gpt-5-mini",
+        messageMode: "simple",
+        message: "Hello",
+        notreMode: "auto",
+        notreTelemetry: true,
+      }),
+    ).toEqual({
+      model: "openai/gpt-5-mini",
+      messages: [{ role: "user", content: "Hello" }],
+      notre: { mode: "auto", telemetry: true },
+    });
+  });
+
+  it("includes optional parameters", () => {
     expect(
       buildChatCompletionBody({
         model: "openai/gpt-5-mini",

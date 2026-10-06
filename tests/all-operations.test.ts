@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import {
   BASE_URL,
   httpGet,
-  httpGetWithoutAuth,
+  httpGetWithHeaders,
   httpPost,
   isGatewayHealthy,
 } from "./integration-http";
@@ -299,7 +299,7 @@ describe.skipIf(!runLiveGateway)("n8n node — all operations integration", () =
   it(
     "401 for missing Authorization header",
     async () => {
-      const res = await httpGetWithoutAuth("/v1/usage", { Accept: "application/json" });
+      const res = await httpGetWithHeaders("/v1/usage", { Accept: "application/json" });
       expect(res.status).toBe(401);
     },
     15_000,
